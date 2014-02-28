@@ -1,7 +1,0 @@
-#Log ( ( "1" . "2" ) . ( "test" . ( in "hoi" replace "o" with "a" ) . "3" ) )
-if path startswith "/goto/"
-	Set var[url] ( in path replace "/goto/" with "" )
-	Header ( "Location: " . var[url] )
-	Log ( "Redirecting Mr/Mrs " . sourceip . " to: " . var[url] )
-	ResponseCode "302"
-end
