@@ -1,0 +1,2273 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <sstream>
+#include <iostream>
+#include <fstream>
+#include <unistd.h>
+#include <string>
+#include <vector>
+#include <boost/regex.hpp>
+#include <errno.h>
+#include <string.h>
+#include <iomanip>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <chrono>
+
+#include <jb_http_compiler.h>
+
+#define NRM  "\x1B[0m"
+#define RED  "\x1B[31m"
+#define GRE  "\x1B[32m"
+#define YEL  "\x1B[33m"
+#define BLU  "\x1B[34m"
+#define PUR  "\x1B[0m"//"\x1B[35m"
+#define CYA  "\x1B[36m"
+#define WHI  "\x1B[37m"
+
+using namespace std;
+bool replace(std::string& str, const std::string& from, const std::string& to)
+{
+	size_t start_pos = str.find(from);
+	if (start_pos == std::string::npos) return false;
+	str.replace(start_pos, from.length(), to);
+	return true;
+}
+bool is_dir(const char* path)
+{
+	struct stat buf;
+	stat(path, &buf);
+	return S_ISDIR(buf.st_mode);
+}
+void sigchld_handler(int s)
+{
+	while(waitpid(-1, NULL, WNOHANG) > 0);
+}
+bool verbose;
+bool verbose = false, teapot = false, php = false, python = false, perl = false, quiet = false;
+
+string compileConfigScript(string confFile, vector<string>* strings, vector<string>* regexs, vector<string>* inputs)
+{
+	auto startTimeCompile = std::chrono::system_clock::now();
+	std::stringstream byteCode;
+	// Prepiling (lol.)
+	std::stringstream curThing;
+	
+	// Compiling (lol.)
+	std::stringstream theThing;
+	vector<unsigned char>* operatorStack = new vector<unsigned char>();
+	vector<unsigned char>* dataStack = new vector<unsigned char>();
+	
+	unsigned char bcStringCount = 0;
+	unsigned char bcRegexCount = 0;
+	unsigned char bcInputCount = 0;
+	
+	bool inString = false;
+	bool inRegex = false;
+	bool inStatement = false;
+	bool inSubstatement = false;
+	bool beginningOfLine = true;
+	bool inCommandStatement = false; // e.g. Redirect
+	bool inSetvar = false; // setvar
+	
+	//bool inTheThing = false; // TheThing is stuff that should be noted in reverse-polish
+	
+	int line = 1;
+	
+	for(int i=0; i<confFile.length(); i++)
+	{
+		//printf("\n%s%c", "Checkpoint 001", confFile[i]);
+		if (beginningOfLine)
+		{
+			//printf("\n%s", "Checkpoint 002");
+		ignoreStartingSpaces:
+			while (confFile[i]=='\n' || confFile[i]=='\t' || confFile[i]=='\r' || confFile[i]==' ')
+			{
+				i++;
+			}
+			if (confFile[i]=='#')
+			{
+				//printf("%s", "\nFound #, commenting it out :) :(");
+				while (confFile[i]!='\n')
+				{
+					i++;
+				}
+				i++;
+				goto ignoreStartingSpaces;
+			}
+		}
+		//printf("\n%s", "Checkpoint 003");
+		// Brackets :] :) :/ :\ :( :[
+		if ((!inRegex)&&(!inString)&&(confFile[i]=='(')) // Enter bracketed part
+		{
+			printf("\n%s", "ENTERED OPENING BRACKET");
+			dataStack->push_back((unsigned char)0x26);
+			operatorStack->push_back((unsigned char)0x26);
+		}
+		else if ((!inRegex)&&(!inString)&&(confFile[i]==')')) // Exit bracketed part
+		{
+			// Search back for 0x26's and delete em
+			//printf("\n%s%i", "Checkpoint 004=dataStack->size()=", dataStack->size());
+			for (int j=dataStack->size()-1;j>=0;j--)
+			{
+				if (dataStack->at(j)==0x26)
+				{
+					dataStack->erase(dataStack->begin()+j);
+					printf("\n%s", "EXITED OPENING BRACKET");
+					break;
+				}
+				if (j==0)
+				{
+					printf("\n%s%i%s%i%s", "[Config script error line=", line, " col=", (i+1), "] Closing bracket has no matching opening bracket. ignoring it");
+					goto endOfRemoving0x26;
+				}
+			}
+			for (int j=operatorStack->size()-1;j>=0;j--)
+			{
+				if (operatorStack->at(j)==0x26)
+				{
+					operatorStack->erase(operatorStack->begin()+j);
+					break;
+				}
+				if (j==0)
+				{
+					printf("\n%s%i%s%i%s", "[Config script error line=", line, " col=", (i+1), "] OMFG THE STRANGEST ERROR EVER CONTACT JESBUS IMMEDIATELY. THIS COULD SHOULD NEVER BE REACHED. WTF. HELP. HALF LIFE 3 CONFIRMED. END OF THE WORLD 6/6/2066. MAYA CALENDAR FOUND IN INCA EMPIRE PYRAMID DURING SPANISH INQUISITION.");
+					break;
+				}
+			}
+			endOfRemoving0x26:
+			int asd = 0;
+		}
+		else if ((!inRegex)&&(!inString)&&(confFile[i]=='"')) // Enter string
+		{
+			inString = true;
+		}
+		else if (inString&&(confFile[i]=='"')) // Exit string
+		{
+			inString = false;
+			//printf("\nString=%s", curThing.str().c_str());
+			string s = curThing.str();
+			strings->push_back(s);
+			if (inCommandStatement)
+			{
+				byteCode << (unsigned char)0x20;
+				bcStringCount++;
+				byteCode << (unsigned char)bcStringCount;
+				//printf("\n%s%s", "[BYTECODE] Added string=", s.c_str());
+			}
+			else
+			{
+				dataStack->push_back(0x20);
+				//printf("\n%s", "Added string to data stack");
+			}
+			curThing.str("");
+		}
+		else if ((!inRegex)&&(!inString)&&(confFile[i]=='/')) // Enter regex
+		{
+			inRegex = true;
+		}
+		else if (inRegex&&(confFile[i]=='/'))//(confFile[i]==' ' || confFile[i]==':' || confFile[i]=='\n' || confFile[i]=='\r' || confFile[i]=='\t')) // Exit regex
+		{
+			inRegex = false;
+			//printf("\nRegex=%s", curThing.str().c_str());
+			string s = curThing.str();
+			regexs->push_back(string(s));
+			if (inCommandStatement)
+			{
+				byteCode << (unsigned char)0x21;
+				bcRegexCount++;
+				byteCode << (unsigned char)bcRegexCount;
+				//printf("\n%s%s", "[BYTECODE] Added regex=", s.c_str());
+			}
+			else
+			{
+				dataStack->push_back(0x21);
+				//printf("\n%s", "Added regex to data stack");
+			}
+			curThing.str("");
+		}
+		else if (inRegex||inString) // Buffer regex & string
+		{
+			curThing << confFile[i];
+		}
+		else if ((!inStatement)&&beginningOfLine) // Enter statement
+		{
+			inStatement = true;
+		}
+		else if (inStatement&&(confFile[i]==' ' || confFile[i]==':' || confFile[i]=='\n' || confFile[i]=='\r' || confFile[i]=='\t')) // Exit statement
+		{
+			inStatement = false;
+			std::string s = curThing.str();
+			//printf("\nStatement=%s", s.c_str());
+			curThing.str("");
+			//printf("\n%s%s", "[BYTECODE] added statement ", s.c_str());
+			if (s=="if") byteCode << (unsigned char)0x92;
+			else if (s=="end")
+			{
+				byteCode << (unsigned char)0x91;
+				//printf("\n%s%i", "byteCode[0]=", (int)(byteCode.str().c_str()[0]));
+				//printf("\n%s%i", "indeed statement end ", byteCode.str().length());
+			}
+			else if (s=="else") byteCode << (unsigned char)0x93;
+			else if (s=="elseif") byteCode << (unsigned char)0x94;
+			else if (s=="exit") byteCode << (unsigned char)0x95;
+			else if (s=="setvar")
+			{
+				byteCode << (unsigned char)0x97;
+				inSetvar = true;
+			}
+			else if (s=="Redirect")
+			{
+				byteCode << (unsigned char)0x70;
+				inCommandStatement = true;
+			}
+			else if (s=="ResponseCode")
+			{
+				byteCode << (unsigned char)0x71;
+				inCommandStatement = true;
+			}
+			else if (s=="ResponseStatus")
+			{
+				byteCode << (unsigned char)0x72;
+				inCommandStatement = true;
+			}
+			else if (s=="Header")
+			{
+				byteCode << (unsigned char)0x73;
+				inCommandStatement = true;
+			}
+			else if (s=="Rewrite")
+			{
+				byteCode << (unsigned char)0x74;
+				inCommandStatement = true;
+			}
+			else if (s=="Nop")
+			{
+				byteCode << (unsigned char)0x77;
+				//inCommandStatement = true;
+			}
+			else if (s=="SetPath")
+			{
+				byteCode << (unsigned char)0x78;
+				inCommandStatement = true;
+			}
+			else if (s=="ReplacePath")
+			{
+				byteCode << (unsigned char)0x79;
+				inCommandStatement = true;
+			}
+			else if (s=="Recurse")
+			{
+				printf("\n%s", "Added recurse to bytecode");
+				byteCode << (unsigned char)0x7A;
+				//inCommandStatement = true;
+			}
+			else if (s=="Set")
+			{
+				byteCode << (unsigned char)0x7B;
+				inCommandStatement = true;
+			}
+			else if (s=="Remove")
+			{
+				byteCode << (unsigned char)0x7C;
+				inCommandStatement = true;
+			}
+			else if (s=="RemoveAllGet")
+			{
+				byteCode << (unsigned char)0x7D;
+			}
+			else if (s=="RemoveAllPost")
+			{
+				byteCode << (unsigned char)0x7E;
+			}
+			else
+			{
+				printf("%s%i%s%s%s", "\nError on line ", line, ":\nUnknown command '", s.c_str(), "'\n");
+				byteCode.str("");
+				break;
+			}
+			//printf("\n%s%i", "byteCode[0]=", (int)byteCode.str().c_str()[0]);
+			//printf("\n%s%i", "indeed statement end ", byteCode.str().length());
+		}
+		else if ((!inSubstatement)&&(!inStatement)&&!(confFile[i]==' ' || confFile[i]==':' || confFile[i]=='\n' || confFile[i]=='\r' || confFile[i]=='\t')) // Enter substatement
+		{
+			inSubstatement = true;
+		}
+		else if (inSubstatement&&(confFile[i]==' ' || confFile[i]==':' || confFile[i]=='\n' || confFile[i]=='\r' || confFile[i]=='\t' || confFile[i]==')')) // Exit substatement
+		{
+			inSubstatement = false;
+			string s = curThing.str();
+			//printf("\nSubstatement=%s", s.c_str());
+			curThing.str("");
+			if (inSetvar)
+			{
+				inSetvar = false;
+				if (s.substr(0, 4)=="var[") s = s.substr(4, s.length()-5);
+				inputs->push_back(s);
+				bcInputCount++;
+				byteCode << (unsigned char)bcInputCount;
+			}
+			else if (s=="not") operatorStack->push_back(0x40);
+			else if (s=="then") byteCode << (unsigned char)0x96;
+			else if (s=="equals") operatorStack->push_back(0x41);
+			else if (s=="contains") operatorStack->push_back(0x42);
+			else if (s=="concat" || s=="&" || s=="." || s=="+") operatorStack->push_back(0x49);
+			else if (s=="and") operatorStack->push_back(0x43);
+			else if (s=="or") operatorStack->push_back(0x44);
+			else if (s=="nand") operatorStack->push_back(0x45);
+			else if (s=="nor") operatorStack->push_back(0x46);
+			else if (s=="xor") operatorStack->push_back(0x47);
+			else if (s=="xnor") operatorStack->push_back(0x48);
+			/*else if (s=="host")
+			{
+				inputs->push_back(string(s));
+				dataStack->push_back(0x22);
+				printf("\n%s", "Added input to data stack");
+			}*/
+			else if (s=="path")
+			{
+				inputs->push_back(string(s));
+				dataStack->push_back(0x22);
+			}
+			else if (s=="content")
+			{
+				inputs->push_back(string(s));
+				dataStack->push_back(0x22);
+			}
+			else if (s=="sourceip")
+			{
+				inputs->push_back(string(s));
+				dataStack->push_back(0x22);
+			}
+			else if (s.length()>7 && s.substr(0, 7)=="header[")
+			{
+				inputs->push_back(s.substr(7, s.length()-8));
+				dataStack->push_back(0x25);
+			}
+			else if (s.length()>4 && s.substr(0, 4)=="get[")
+			{
+				inputs->push_back(s.substr(4, s.length()-5));
+				if (inCommandStatement)
+				{
+					byteCode << (unsigned char)0x27;
+					bcInputCount++;
+					byteCode << (unsigned char)bcInputCount;
+				}
+				else dataStack->push_back(0x27);
+			}
+			else if (s.length()>5 && s.substr(0, 5)=="post[")
+			{
+				inputs->push_back(s.substr(5, s.length()-6));
+				if (inCommandStatement)
+				{
+					byteCode << (unsigned char)0x28;
+					bcInputCount++;
+					byteCode << (unsigned char)bcInputCount;
+				}
+				else dataStack->push_back(0x28);
+			}
+			else if (s.length()>4 && s.substr(0, 4)=="var[")
+			{
+				inputs->push_back(s.substr(4, s.length()-5));
+				if (inCommandStatement)
+				{
+					byteCode << (unsigned char)0x29;
+					bcInputCount++;
+					byteCode << (unsigned char)bcInputCount;
+				}
+				else dataStack->push_back(0x29);
+			}
+			else
+			{
+				printf("%s%i%s%s%s", "\nError on line ", line, ":\nUnknown operator '", s.c_str(), "'\n");
+				byteCode.str("");
+				break;
+			}
+		}
+		//printf("\n%s", "Checkpoint 004");
+		int oss = -1;
+		for (int k=0;k<1;k++)
+		{
+			if ((oss=operatorStack->size())!=0)
+			{
+				//printf("\n%s%i", "Checkpoint 101:oss=", oss);
+				char lastOp = operatorStack->back();
+				//printf("\n%s", "Checkpoint 101.1");
+				int dsSize = dataStack->size();
+				//printf("\n%s", "Checkpoint 101.2");
+				if (lastOp==0x41 ||
+					lastOp==0x42 ||
+					lastOp==0x43 ||
+					lastOp==0x44 ||
+					lastOp==0x45 ||
+					lastOp==0x46 ||
+					lastOp==0x47 ||
+					lastOp==0x48 ||
+					lastOp==0x49) // Equals || Contains || Logicops || concat
+				{
+					//printf("\n%s", "Checkpoint 102");
+					if (dsSize>=2)
+					{
+						//printf("\n%s", "Checkpoint 103");
+						//usleep(1000000);
+						char d2 = dataStack->back();
+						if (d2==0x26)
+						{
+							//printf("\n%s%i%s%i%s", "[Syntax error L=", line, " C=", i, "] No data available inside brackets");
+							break;//goto bufferAndStuffer;
+						}
+						dataStack->pop_back();
+						char d1 = dataStack->back();
+						if (d1==0x26)
+						{
+							//printf("\n%s", "[Syntax error] Not enough data available inside brackets");
+							dataStack->push_back(d2);
+							break;//goto bufferAndStuffer;
+						}
+						/*if (d1==d2)
+						{*/
+							dataStack->pop_back();
+							operatorStack->pop_back();
+						
+							if (d1==0x20) // String
+							{
+								byteCode << (unsigned char)d1;
+								bcStringCount++;
+								byteCode << (unsigned char)bcStringCount;
+							}
+							else if (d1==0x21) // Regex
+							{
+								byteCode << (unsigned char)d1;
+								bcRegexCount++;
+								byteCode << (unsigned char)bcRegexCount;
+							}
+							else if (d1==0x22 || d1==0x25 || d1==0x27 || d1==0x28 || d1==0x29) // Input
+							{
+								byteCode << (unsigned char)d1;
+								bcInputCount++;
+								byteCode << (unsigned char)bcInputCount;
+							}
+							else if (d1==0x23) // placeholder
+							{
+						
+							}
+							if (d2==0x20) // String
+							{
+								byteCode << (unsigned char)d2;
+								bcStringCount++;
+								byteCode << (unsigned char)bcStringCount;
+							}
+							else if (d2==0x21) // Regex
+							{
+								byteCode << (unsigned char)d2;
+								bcRegexCount++;
+								byteCode << (unsigned char)bcRegexCount;
+							}
+							else if (d2==0x22 || d2==0x25 || d2==0x27 || d2==0x28 || d2==0x29) // Input
+							{
+								byteCode << (unsigned char)d2;
+								bcInputCount++;
+								byteCode << (unsigned char)bcInputCount;
+							}
+							else if (d2==0x23) // placeholder
+							{
+						
+							}
+							byteCode << (unsigned char)lastOp;
+							dataStack->push_back(0x23);
+							//printf("\n%s", "[BYTECODE] added two datas & op");
+						//}
+						//else printf("\n%s", "Notice: Cannot use EQUALS on two things of a different type");
+					}
+				}
+				else if (lastOp==0x40) // Not
+				{
+					if (dsSize>=1)
+					{
+						char d1 = dataStack->back();
+						if (d1==0x23)
+						{
+							dataStack->pop_back();
+							operatorStack->pop_back();
+							byteCode << (unsigned char)0x40;
+							dataStack->push_back(0x23);
+							//printf("\n%s", "[BYTECODE] added one data & NOT ");
+						}
+						//else printf("\n%s", "Notice: Cannot use NOT on that");
+					}
+				}
+			}
+		}
+		//printf("\n%s", "Checkpoint 201");
+	bufferAndStuffer:
+		//printf("\n%s", "Checkpoint 202");
+		if (inStatement||inSubstatement) curThing << confFile[i]; // Buffer statement
+		//printf("\n%s", "Checkpoint 203");
+		beginningOfLine = confFile[i]=='\n' || confFile[i]=='\r' || ((!inString)&&(!inRegex)&&(confFile[i]==':'));
+		//printf("\n%s", "Checkpoint 204");
+		if (beginningOfLine)
+		{
+			/*while(dataStack->size()!=0)
+			{
+				char d = dataStack->back();
+				if (d!=0x23)
+				{
+					
+				}
+			}*/
+			if (dataStack->size()!=0)
+			{
+				unsigned char d1 = dataStack->back();
+				//printf("\nNew line began, but there was still data on the stack...");
+				if (d1==0x20) // String
+				{
+					//printf("\n... and it was a string.");
+					byteCode << (unsigned char)d1;
+					bcStringCount++;
+					byteCode << (unsigned char)bcStringCount;
+				}
+			}
+			operatorStack->clear();
+			dataStack->clear();
+			line++;
+			inCommandStatement = false;
+			//printf("\n%s", "Checkpoint 204");
+		}
+		//printf("\n%s", "Checkpoint 205");
+	}
+	//usleep(100000);
+	byteCode << (unsigned char)0x77;
+	byteCode << (unsigned char)0xFF;
+	
+	auto endTimeCompile = std::chrono::system_clock::now();
+	auto elapsed = endTimeCompile - startTimeCompile;
+	double ms = double(elapsed.count())/1000000;
+	if (verbose) printf("\n%s%s%f%s", PUR, "Compilation took: ", ms, "ms");
+	
+	//printf("\n%s%i", "indeed statement end ", byteCode.str().length());
+	//printf("\n%s%i", "byteCode[0]=", (int)byteCode.str().c_str()[0]);
+	if (verbose) printf("%s", "\nDone with compiling config script");
+	return byteCode.str();
+}
+
+// get sockaddr, IPv4 or IPv6:
+void *get_in_addr(struct sockaddr *sa)
+{
+	if (sa->sa_family == AF_INET)
+	{
+		return &(((struct sockaddr_in*)sa)->sin_addr);
+	}
+	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+std::string bin2hex(const std::string& input)
+{
+    std::string res;
+    const char hex[] = "0123456789ABCDEF";
+    for(auto sc : input)
+    {
+        unsigned char c = static_cast<unsigned char>(sc);
+        res += hex[c >> 4];
+        res += hex[c & 0xf];
+    }
+
+    return res;
+}
+std::string bin2hex(char c)
+{
+    std::string res;
+    const char hex[] = "0123456789ABCDEF";
+    
+    unsigned char c2 = static_cast<unsigned char>(c);
+    res += hex[c2 >> 4];
+    res += hex[c2 & 0xf];
+
+    return res;
+}
+void printRegexError(boost::regex_error &e)
+{
+	char* precedeError = "\n         %s";
+	switch (e.code())
+	{
+		case boost::regex_constants::error_collate:
+			printf(precedeError, "The expression contained an invalid collating element name.");
+		break;
+		case boost::regex_constants::error_ctype:
+			printf(precedeError, "The expression contained an invalid character class name.");
+		break;
+		case boost::regex_constants::error_escape:
+			printf(precedeError, "The expression contained an invalid escaped character, or a trailing escape.");
+		break;
+		case boost::regex_constants::error_backref:
+			printf(precedeError, "The expression contained an invalid back reference.");
+		break;
+		case boost::regex_constants::error_brack:
+			printf(precedeError, "The expression contained mismatched brackets ([ and ]).");
+		break;
+		case boost::regex_constants::error_paren:
+			printf(precedeError, "The expression contained mismatched parentheses (( and )).");
+		break;
+		case boost::regex_constants::error_brace:
+			printf(precedeError, "The expression contained mismatched braces ({ and }).");
+		break;
+		case boost::regex_constants::error_badbrace:
+			printf(precedeError, "The expression contained an invalid range between braces ({ and }).");
+		break;
+		case boost::regex_constants::error_range:
+			printf(precedeError, "The expression contained an invalid character range.");
+		break;
+		case boost::regex_constants::error_space:
+			printf(precedeError, "There was insufficient memory to convert the expression into a finite state machine.");
+		break;
+		case boost::regex_constants::error_badrepeat:
+			printf(precedeError, "The expression contained a repeat specifier (one of *?+{) that was not preceded by a valid regular expression.");
+		break;
+		case boost::regex_constants::error_complexity:
+			printf(precedeError, "The complexity of an attempted match against a regular expression exceeded a pre-set level.");
+		break;
+		case boost::regex_constants::error_stack:
+			printf(precedeError, "There was insufficient memory to determine whether the regular expression could match the specified character sequence.");
+		break;
+		default:
+			printf(precedeError, "Unknown error :(");
+		break;
+	}
+}
+int main(int argc, char* argv[])
+{
+	char* port = "80";
+	char* directory = ".";
+	char* index = "index.html";
+	int backlog = 10;
+	for (int i=1;i<argc;i++)
+	{
+		std::string arg = std::string(argv[i]);
+			 if (arg=="-v" || arg=="--verbose") verbose = true;
+		else if (arg=="-q" || arg=="--quiet") quiet = true;
+		else if (arg=="-t" || arg=="--teapot") teapot = true;
+		else if (arg=="-php" || arg=="--php") php = true;
+		else if (arg=="-python" || arg=="--python") python = true;
+		else if (arg=="-perl" || arg=="--perl") perl = true;
+		else if (arg=="-d" || arg=="--directory") { directory = argv[i+1]; i++; }
+		else if (arg=="-i" || arg=="--index") { index = argv[i+1]; i++; }
+		else if (arg=="-b" || arg=="--backlog") { backlog = std::stoi(std::string(argv[i+1])); i++; }
+		else if (arg=="-p" || arg=="--port")
+		{
+			port = argv[i+1]; i++;
+			/*if (std::to_string(std::stoi(std::string(port)))!=port)
+			{
+				printf("%s", "Port has to be an int\n");
+				return 0;
+			}*/
+		}
+		else if (arg=="-pyh" || arg=="--pythonh")
+		{
+			printf("%s", "###########################");
+			printf("%s", "\n## Jesbus' HTTP server python help");
+			printf("%s", "\n## Python scripts are executed when having the extension .py");
+			printf("%s", "\n## GET parameters  = ast.literal_eval(sys.argv[1])");
+			printf("%s", "\n## POST parameters = ast.literal_eval(sys.argv[2])");
+			printf("%s", "\n## print command can be used to output stuff");
+			printf("%s", "\n## That's it.. Good fortune on the road.");
+			printf("%s", "\n###########################\n");
+			return 0;
+		}//parse_str($str, $output);
+		else if (arg=="-peh" || arg=="--perlh")
+		{
+			printf("%s", "###########################");
+			printf("%s", "\n## Jesbus' HTTP server perl help");
+			printf("%s", "\n## Perl scripts are executed when having the extension .pl");
+			printf("%s", "\n## GET parameters  : $ARGV[0]");
+			printf("%s", "\n## POST parameters : $ARGV[1]");
+			printf("%s", "\n## You'll have to parse them yourself xD");
+			printf("%s", "\n###########################\n");
+			return 0;
+		}
+		else if (arg=="--phphelp")
+		{
+			printf("%s", "###########################");
+			printf("%s", "\n## Jesbus' HTTP server PHP help");
+			printf("%s", "\n## PHP scripts are executed when having the extension .php");
+			printf("%s", "\n## GET parameters  : parse_str($_SERVER['argv'][1], $_GET)");
+			printf("%s", "\n## POST parameters : parse_str($_SERVER['argv'][2], $_POST)");
+			printf("%s", "\n## That's it.. Good fortune on the road.");
+			printf("%s", "\n###########################\n");
+			return 0;
+		}
+		else if (arg=="-h" || arg=="--help" || arg=="help")
+		{
+			printf("%s", "###########################");
+			printf("%s", "\n## Jesbus' HTTP server help");
+			printf("%s", "\n## Short   Long        Meaning                     Default");
+			printf("%s", "\n## -h      --help      Show this help              Nope");
+			printf("%s", "\n## -v      --verbose   Enable advanced logging     Disabled");
+			printf("%s", "\n## -q      --quiet     Disable connection logging  Disabled");
+			printf("%s", "\n## -p      --port      Set the port to listen to   80");
+			printf("%s", "\n## -d      --directory Set the directory           ./");
+			printf("%s", "\n## -t      --teapot    Enable teapot mode          Disabled");
+			printf("%s", "\n## -php    --php       Enable PHP                  Disabled");
+			printf("%s", "\n##         --phphelp   Show help for PHP           Disabled");
+			printf("%s", "\n## -python --python    Enable Python               Disabled");
+			printf("%s", "\n## -pyh    --pythonh   Show help for Python        Nope");
+			printf("%s", "\n## -perl   --perl      Enable Perl                 Disabled");
+			printf("%s", "\n## -peh    --perlh     Show help for Perl        Nope");
+			printf("%s", "\n## -i      --index     Set the index file (home)   index.html");
+			printf("%s", "\n## -b      --backlog   Set the max. connections    10");
+			printf("%s", "\n###########################\n");
+			return 0;
+		}
+		else
+		{
+			printf("%s%s%s", "Incomprehended argument: ", arg.c_str(), "\n");
+			return 0;
+		}
+	}
+	if (teapot) verbose = false;
+	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+	struct addrinfo hints, *servinfo, *p;
+	struct sockaddr_storage their_addr; // connector's address information
+	socklen_t sin_size;
+	struct sigaction sa;
+	int yes=1;
+	char s[INET6_ADDRSTRLEN];
+	int rv;
+
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE; // use my IP
+
+	if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0)
+	{
+		fprintf(stderr, "Error: %s\n", gai_strerror(rv));
+		return 1;
+	}
+	
+	// loop through all the results and bind to the first we can
+	for (p = servinfo; p != NULL; p = p->ai_next)
+	{
+		if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
+		{
+			perror("server: socket");
+			continue;
+		}
+		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
+		{
+			perror("setsockopt");
+			exit(1);
+		}
+
+		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1)
+		{
+			close(sockfd);
+			perror("Failed to bind to port");
+			continue;
+		}
+
+		break;
+	}
+
+	if (p == NULL) 
+	{
+		//fprintf(stderr, "Failed to bind to port\n");
+		printf("%s%s%s", "Failed to bind to port ", port, "\n");
+		return 2;
+	}
+
+	freeaddrinfo(servinfo); // all done with this structure
+
+	if (listen(sockfd, backlog) == -1)
+	{
+		perror("listen");
+		exit(1);
+	}
+
+	sa.sa_handler = sigchld_handler; // reap all dead processes
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART;
+	if (sigaction(SIGCHLD, &sa, NULL) == -1)
+	{
+		perror("sigaction");
+		exit(1);
+	}
+	
+	
+	vector<string>* strings = new vector<string>();
+	vector<string>* regexs  = new vector<string>();
+	vector<string>* inputs  = new vector<string>();
+	
+	if ((!verbose)&&(!quiet))
+	{
+					printf("##########################\n");
+		if (teapot)	printf("### Starting teapot... ###\n");
+		else		printf("### Starting server... ###\n");
+					printf("##########################\n");
+	}
+	
+	string byteCode;
+	
+	struct stat buffer;
+	if (stat("jb_http.conf", &buffer)==0)
+	{
+		if (verbose) printf("\njb_http.conf file found! Reading and compiling it...");
+
+		std::ifstream t("jb_http.conf");
+		std::stringstream buffer;
+		buffer << t.rdbuf();
+		t.close();
+		std::string confFile = buffer.str();
+		
+		byteCode = compileConfigScript(confFile, strings, regexs, inputs);
+	}
+	string byteCodeString = byteCode;//.str();
+	//printf("\n%s%i", "byteCodeString.length()=", byteCodeString.length());
+	int byteCodeStringLength = byteCodeString.length();
+	
+	char* confScript = new char[byteCodeStringLength+1];
+	for (int i=0;i<byteCodeStringLength;i++){confScript[i]='a';}
+	confScript[byteCodeStringLength] = (char)0x00;
+	//printf("\n%s%i", "strlen(confScript)=", strlen(confScript));
+	//printf("\n%s\n", confScript);
+	
+	//printf("\n%s%i", "indeed statement end ", byteCodeStringLength);
+	//printf("\n%s%i", "confScript size=", sizeof(confScript));
+	
+	strncpy(confScript, byteCodeString.c_str(), byteCodeStringLength);
+	//printf("\n%s%i", "strlen(confScript)=", strlen(confScript));
+	
+	//printf("\nconfScript=%s\n", confScript);
+	//printf("\n%s%i\n", "confScript size=", sizeof(confScript));
+	
+	if (!quiet)
+	{
+		if (!teapot)
+		{
+			if (verbose) printf("\nServer is running!\n");
+			else
+			{
+				printf("### Server is running! ###\n");
+				printf("##########################\n");
+			}
+		}
+		else
+		{
+			if (verbose) printf("\nTeapot is running!\n");
+			else
+			{
+				printf("### Teapot is running! ###\n");
+				printf("##########################\n");
+			}
+		}
+	}
+	while(1)
+	{
+		sin_size = sizeof their_addr;
+		new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+		if (new_fd == -1)
+		{
+			perror("accept");
+			continue;
+		}
+
+		inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), s, sizeof s);
+		
+		
+		if (!fork()) // Child process/thread (idk lol, im such a n00b)
+		{
+			close(sockfd); // child doesn't need the listener
+			
+			// Request vars
+			char* requestType;
+			std::string requestLocation, requestContent, requestSender=s, requestPath, requestParams;
+			
+			// Reponse vars
+			int responseCode = 200;
+			std::string responseText = "OK";
+			
+			if (verbose) printf("%s%s", "\n##########################\nIncoming connection from ", requestSender.c_str());
+			else if (!quiet) printf("%s%s%s", "\n", requestSender.c_str(), ": ");
+
+			
+
+			////////////////////////////////////////////////
+			// #### -------------- Read request
+			
+			int headerContentLength = -1;
+			bool headerTransferEncodingChunked = false;
+			string headerHost;
+			
+			std::string keys  [32];
+			std::string values[32];
+			
+			{
+				auto startTimeReceive = std::chrono::system_clock::now();
+				char recvBuff[256];
+				int amountReceived = 0;
+				if (verbose) printf("%s", "\nReceiving request...");
+			
+				std::stringstream headerSS;
+				int blocksReceived = 0;
+				bool shouldRequestBeParsed = true;
+				if (teapot)
+				{
+					shouldRequestBeParsed = false;
+					responseCode = 418;
+					responseText = "I'm a teapot";
+				}
+				while ((amountReceived=recv(new_fd, recvBuff, 256, 0))>0)
+				{
+					if (shouldRequestBeParsed)
+					{
+						std::string str = std::string(recvBuff);
+						headerSS << str.substr(0, amountReceived);
+					}
+					blocksReceived++;
+					if (blocksReceived>8)
+					{
+						if (shouldRequestBeParsed)
+						{
+							shouldRequestBeParsed = false;
+							responseCode = 413;
+							headerSS.str("");
+							headerSS.clear();
+						}
+					}
+					else if (blocksReceived>128)
+					{
+						printf("\n%s", "Request size is way too big. Connection cut off");
+						close(new_fd);
+						exit(0);
+					}
+					if (amountReceived!=256) break;
+				}
+				if (responseCode==413)
+				{
+					responseText = "Request exceeds 2 kiB! In fact, it's ";
+					responseText += std::to_string(blocksReceived*256+amountReceived);
+					responseText += " bytes!";
+				}
+				std::string header = headerSS.str();
+			
+				//printf("%s%s%s", "\n##----------\n", header.c_str(), "\n##------------\n");
+			
+				const char* headerCs = header.c_str();
+			
+				if (verbose)
+				{
+					printf("%s%i%s", "\nReceived request of ", blocksReceived*256+amountReceived, " bytes");
+					auto endTimeReceive = std::chrono::system_clock::now();
+					auto elapsed = endTimeReceive - startTimeReceive;
+					double ms = double(elapsed.count())/1000000;
+					printf("\n%s%s%f%s", PUR, "Receiving request took: ", ms, "ms");
+				}
+
+				
+				////////////////////////////////////////////////
+				// #### -------------- Parse request
+				
+				auto startTimeParse = std::chrono::system_clock::now();
+				
+				if (shouldRequestBeParsed)
+				{
+					if (verbose) printf("%s", "\nInterpreting request...");
+					if (header.substr(0, 3)=="GET") requestType = "GET";
+					else if (header.substr(0, 4)=="POST") requestType = "POST";
+					else
+					{
+						responseCode = 400; // Bad request
+						responseText = "Hablo HTTP?";
+						shouldRequestBeParsed = false;
+					}
+				}
+				
+				if (shouldRequestBeParsed)
+				{
+					bool inLoc = false;
+					bool locDone = false;
+			
+					bool inHeaders = false;
+					bool inKey = false;
+					bool inContent = false;
+					bool insideContent = false;
+					bool seenQuestionMark = false;
+			
+					std::stringstream key, value, content, location, locPath, locParams;
+			
+					int keyI = 0;
+					int headerCount = 0;
+			
+					for(int i = 2; i < header.size(); ++i)
+					{
+						if (!inHeaders)
+						{
+							if (inLoc)
+							{
+								if (header[i]==' ') { inLoc = false; locDone = true; continue; }
+								location << header[i];
+								if (header[i]=='?') seenQuestionMark = true;
+								else if (seenQuestionMark) locParams << header[i];
+								else
+								{
+									locPath << header[i];
+									if (header[i]=='/' && header[i-1]=='.' && header[i-2]=='.' && header[i-3]=='/')
+									{
+										responseCode = 403;
+										responseText = "You're not allowed to go upwards in the directory tree";
+										break;
+									}
+								}
+								location.seekg(0, std::ios::end);
+								int size = location.tellg();
+								if (size>256)
+								{
+									responseCode = 414;
+									responseText = "Request-URI Too Long";
+									break;
+								}
+							}
+							if ((!inLoc)&&(!locDone))
+							{
+								if (header[i]==' ') inLoc = true;
+							}
+							if (header[i]=='\n')
+							{
+								inHeaders = true;
+								inKey = true;
+								key.str(std::string());
+								key.clear();
+							}
+						}
+						else if (inContent)
+						{
+							if (!insideContent)
+							{
+								if (header[i]!='\n' && header[i]!='\r')
+								{
+									insideContent = true;
+								}
+							}
+							else
+							{
+								content << header[i];
+								if (headerContentLength!=-1)
+								{
+									content.seekg(0, std::ios::end);
+									int size = content.tellg();
+									if (size-1>headerContentLength)
+									{
+										responseCode = 400;
+										responseText = "Received more content than the Content-Length header field announced.";
+										break;
+									}
+								}
+							}
+						}
+						else if (inKey)
+						{
+							if (header[i]=='\r')
+							{
+								responseCode = 400;
+								responseText = "Carriage returns are not allowed in the middle of a header key.";
+								break;
+							}
+							if (header[i]=='\n')
+							{
+								responseCode = 400;
+								responseText = "Newlines are not allowed in the middle of a header key.";
+								break;
+							}
+							if (header[i]==':' && header[i+1]==' ')
+							{
+								inKey = false;
+								if (headerCount>=32)
+								{
+									responseCode = 413;
+									responseText = "Too many header fields! This server doesn't allow more than 32.";
+									break;
+								}
+								keys[headerCount] = key.str();
+								++i;
+								value.str(std::string());
+								value.clear();
+							}
+							else
+							{
+								key << header[i];
+								key.seekg(0, std::ios::end);
+								int size = key.tellg();
+								if (size>256)
+								{
+									responseCode = 413;
+									responseText = "Header key too long! Max is 256 bytes.";
+									break;
+								}
+							}
+						}
+						else // inHeaders
+						{
+							if (header[i]=='\r'){}
+							else if (header[i]=='\n')
+							{
+								values[headerCount] = value.str();
+								if (keys[headerCount]=="Content-Length")
+								{
+									headerContentLength = std::stoi(values[headerCount]);
+									if (headerTransferEncodingChunked)
+									{
+										responseCode = 400;
+										responseText = "Both Content-Length and Transfer-Encoding: chunked is not allowed.";
+										break;
+									}
+								}
+								else if (keys[headerCount]=="Transfer-Encoding")
+								{
+									headerTransferEncodingChunked = values[headerCount] == "chunked";
+									if (headerContentLength!=-1 && headerTransferEncodingChunked)
+									{
+										responseCode = 400;
+										responseText = "Both Content-Length and Transfer-Encoding: chunked is not allowed.";
+										break;
+									}
+									if (headerTransferEncodingChunked)
+									{
+										responseCode = 500;
+										responseText = "Sorry, this server cannot deal with Transfer-Encoding: chunked";
+										break;
+									}
+								}
+								else if (keys[headerCount]=="Host")
+								{
+									headerHost = values[headerCount];
+								}
+								headerCount++;
+								key.str(std::string());
+								key.clear();
+								if (header[i+1]=='\r' || header[i+1]=='\n')
+								{
+									inContent = true;
+									inHeaders = false;
+								}
+								else
+								{
+									inKey = true;
+								}
+							}
+							else
+							{
+								value << header[i];
+								value.seekg(0, std::ios::end);
+								int size = value.tellg();
+								if (size>256)
+								{
+									responseCode = 413;
+									responseText = "Header value for "+keys[headerCount]+" too long! Max is 256 bytes.";
+									break;
+								}
+							}
+						}
+					}
+					requestLocation = location.str();
+					requestPath = locPath.str();
+					requestParams = locParams.str();
+					requestContent = content.str();
+					if (verbose && headerCount!=0)
+					{
+						auto endTimeParse = std::chrono::system_clock::now();
+						auto elapsed = endTimeParse - startTimeParse;
+						double ms = double(elapsed.count())/1000000;
+						printf("\n%s%s%f%s\n", PUR, "Parsing took: ", ms, "ms");
+						printf("%s%i%s", "\n##-------- ", headerCount, " header fields:");
+						for (int i=0;i<headerCount;i++)
+						{
+							printf("%s%s%s%s", "\n", keys[i].c_str(), ": ", values[i].c_str());
+						}
+					}
+				}
+			}
+
+			//printf("\n%s%s", "Header host=", headerHost.c_str());
+			//printf("\n%s%s", "requestContent=", requestContent.c_str());
+			
+			vector<string>* varKeys   = new vector<string>();
+			vector<string>* varValues = new vector<string>();
+			
+			////////////////////////////////////////////////
+			// #### -------------- Parse get params
+			
+			bool inKey = true;
+			
+			stringstream buff;
+			vector<string>* getKeys   = new vector<string>();
+			vector<string>* getValues = new vector<string>();
+			
+			string emptyStr = string("");
+			
+			for (int i=0;i<requestParams.length();i++)
+			{
+				if (requestParams[i]=='&')
+				{
+					if (inKey)
+					{
+						string str = buff.str();
+						//printf("\nEnd of key=%s", str.c_str());
+						getKeys->push_back(str);
+						getValues->push_back(emptyStr);
+						//printf("\n%s%s%s", "[========== getKeys->push_back(", buff.str().c_str(), ")");
+					}
+					else
+					{
+						string str = buff.str();
+						//printf("\nEnd of val=%s", str.c_str());
+						getValues->push_back(str);
+						//printf("\n%s%s%s", "[========== getValues->push_back(", buff.str().c_str(), ")");
+					}
+					inKey=true;
+					buff.str("");
+				}
+				else if (inKey&&(requestParams[i]=='='))
+				{
+					inKey = false;
+					string str = buff.str();
+					//printf("\nEnd of key=%s", str.c_str());
+					getKeys->push_back(str);
+					buff.str("");
+				}
+				else buff << requestParams[i];
+			}
+			if (buff.str().length()!=0)
+			{
+				if (inKey)
+				{
+					string str = buff.str();
+					getKeys->push_back(str);
+					getValues->push_back(emptyStr);
+				}
+				else
+				{
+					string str = buff.str();
+					//printf("\nEnd of val=%s", str.c_str());
+					getValues->push_back(str);
+				}
+				buff.str("");
+			}
+			
+			////////////////////////////////////////////////
+			// #### -------------- Parse post params
+			
+			inKey = true;
+			buff.str("");
+			vector<string>* postKeys = new vector<string>();
+			vector<string>* postValues = new vector<string>();
+			
+			for (int i=0;i<requestContent.length();i++)
+			{
+				if (requestContent[i]=='&')
+				{
+					if (inKey)
+					{
+						postKeys->push_back(buff.str());
+						postValues->push_back(string(""));
+					}
+					else
+					{
+						postValues->push_back(buff.str());
+					}
+					inKey=true;
+					buff.str("");
+				}
+				else if (inKey&&(requestContent[i]=='='))
+				{
+					inKey = false;
+					postKeys->push_back(buff.str());
+					buff.str("");
+				}
+				else buff << requestContent[i];
+			}
+			if (buff.str().length()!=0)
+			{
+				if (inKey)
+				{
+					postKeys->push_back(buff.str());
+					postValues->push_back(string(""));
+				}
+				else
+				{
+					postValues->push_back(buff.str());
+				}
+				buff.str("");
+			}
+			
+			auto startTimeBytecode = std::chrono::system_clock::now();
+			
+			////////////////////////////////////////////////
+			// #### -------------- Send response
+			{
+			
+				// Execute bytecode script :) :( :S
+			
+				int byteCodeExecutionCount = 0;
+			
+			byteCodeAgain:
+				byteCodeExecutionCount++;
+				string emptyStr  = string("" );
+				string boolTrue  = string("Y");
+				string boolFalse = string("" );
+				
+				vector<string>* memoryHole = new vector<string>();
+				
+				vector<string*>* datas = new vector<string*>();
+				vector<unsigned char>* dataTypes = new vector<unsigned char>();
+				bool inIf = false;
+				bool inSetvar = false;
+				string* setvarVar = NULL;
+				int curLevel = 0;
+				int searchForElseOrEndAtLevel = -1;
+				int searchForEndAtLevel = -1;
+				unsigned char executingCommand = 0x00;
+				
+				string addedHeaders = "";
+				
+				//printf("\n%s%s", "Header host=", headerHost.c_str());
+				if (responseCode==200 || responseCode==404)
+				{
+					//printf("\n%s%s", "Header host=", headerHost.c_str());
+					for (int i=0;i<strlen(confScript);i++)
+					{
+						if (byteCodeExecutionCount>16)
+						{
+							printf("\n%s", "[Error] Config script recursion limit is 16. aborted");
+							break;
+						}
+						unsigned char c = confScript[i];
+						/////// HERE WAS THE SETVAR EXECUTING STUFF
+						//printf("\n#####confScript[%i]=%s", i, bin2hex(c).c_str());
+					
+						// Take care of level
+						if (i==0 || (i>0 && confScript[i-1]!=0x20 && confScript[i-1]!=0x21 && confScript[i-1]!=0x22))
+						{
+							switch (c)
+							{
+								case 0x92: curLevel++; break;
+								case 0x91: curLevel--; break;
+							}
+						}
+					
+						//printf("\n%s", "Checkpoint #000");
+					
+						// Take care of searching (partially =[)
+						if (searchForEndAtLevel!=-1)
+						{
+							if (c==0x91)
+							{
+								if (curLevel==searchForEndAtLevel)
+								{
+									searchForEndAtLevel = -1;
+								}
+							}
+							else continue;
+						}
+						//printf("\n%s%i%s%i", "curLevel,searchElseEndLevel=", curLevel, ",", searchForElseOrEndAtLevel);
+						if (searchForElseOrEndAtLevel!=-1)
+						{
+							if (c==0x91)
+							{
+								//printf("\n%s", "Found END...");
+								if (curLevel==searchForElseOrEndAtLevel)
+								{
+									searchForElseOrEndAtLevel = -1;
+									//printf("\n%s", "...at the right level");
+								}
+								//else printf("\n%s%i%s%i", "...but not at the right level: curLevel,searchLevel=", curLevel, ",", searchForElseOrEndAtLevel);
+							}
+							else if (c!=0x91 && c!=0x93 && c!=0x94)
+							{
+								//printf("\n%s", "No ELSE or END here. Continue;");
+								continue;
+							}
+						}
+						/*************************************/
+						if ((c>=0x91 && c<=0x9F)||(c>=0x70 && c<=0x7F))
+						{
+						if (executingCommand!=0x00) // IMPORTANTMOD2141
+						{
+							//printf("\nexecutingCommand");
+							if (executingCommand==0x70)
+							{
+								if (datas->size()>=1)
+								{
+									addedHeaders += "Location: ";
+									addedHeaders += *(datas->back());
+									addedHeaders += "\r\n";
+									printf("\n%s%s", "addedHeaders=", addedHeaders.c_str());
+									responseCode = 302;
+									responseText = "Redirect";
+								}
+								else continue;
+							}
+							else if (executingCommand==0x71)
+							{
+								if (datas->size()>=1)
+								{
+									responseCode = std::stoi(*(datas->back()));
+								}
+								else continue;
+							}
+							else if (executingCommand==0x72)
+							{
+								if (datas->size()>=1)
+								{
+									responseText = *(datas->back());
+								}
+								else continue;
+							}
+							else if (executingCommand==0x73)
+							{
+								if (datas->size()>=1)
+								{
+									addedHeaders += *(datas->back());
+								}
+								else continue;
+							}
+							else if (executingCommand==0x74)
+							{
+								if (datas->size()>=2)
+								{
+									printf("\n%s", "[Error] The Rewrite command is currently unused. please remove it from your config file!");
+								}
+								else continue;
+							}
+							else if (executingCommand==0x77)
+							{
+								//printf("\n%s", "NOP");
+							}
+							else if (executingCommand==0x78) // SetPath
+							{
+								if (datas->size()>=1)
+								{
+									requestPath = *(datas->back());
+								}
+								else continue;
+							}
+							else if (executingCommand==0x79) // ReplacePath
+							{
+								if (datas->size()>=2)
+								{
+									int last = datas->size()-1;
+									char type1 = dataTypes->at(last-1);
+									char type2 = dataTypes->at(last);
+									if (type2!=0x20) continue;
+									if (type1==0x20)
+									{
+										printf("\nReplacing string in path with string");
+										printf("\nOld requestPath=%s", requestPath.c_str());
+										replace(
+											requestPath,
+											*(datas->at(last-1)),
+											*(datas->at(last))
+										);
+										printf("\nNew requestPath=%s", requestPath.c_str());
+									}
+									else if (type1==0x21)
+									{
+										printf("\nOld requestPath=%s", requestPath.c_str());
+										boost::regex reg(*(datas->at(last-1)));
+										requestPath = boost::regex_replace(
+											requestPath,
+											reg,
+											*(datas->at(last))
+										);
+										printf("\nNew requestPath=%s", requestPath.c_str());
+									}
+									else continue;
+								}
+								else continue;
+							}
+							else if (executingCommand==0x7A) // Recurse
+							{
+								printf("\n%s", "RECURSE");
+								goto byteCodeAgain;
+							}
+							else if (executingCommand==0x7B) // Set
+							{
+								//printf("\nSet #001");
+								if (datas->size()>=2)
+								{
+									//printf("\nSet #002");
+									int s = dataTypes->size();
+									unsigned char dt1 = dataTypes->at(s-2);
+									unsigned char dt2 = dataTypes->at(s-1);
+									if (dt1==0x27 && dt2==0x20) // GET
+									{
+										//printf("\nSet #003");
+										string* inputName = datas->at(s-2);
+										
+										for (int j=0;j<getKeys->size();j++)
+										{
+											if (getKeys->at(j)==*inputName)
+											{
+												getValues->at(j) = *(datas->back());
+												goto foundGetAndSet;
+											}
+										}
+										getKeys->push_back(*inputName);
+										getValues->push_back(*(datas->back()));
+										foundGetAndSet:;
+									}
+									else if (dt1==0x28 && dt2==0x20)
+									{
+										printf("\nSET POST[] HASNT BEEN IMPLEMENTED YET YA DUMDUM");
+									}
+									else continue;
+								}
+								else continue;
+							}
+							else if (executingCommand==0x7C) // Remove
+							{
+								//printf("\nRemove #001");
+								if (datas->size()>=1)
+								{
+									//printf("\nRemove #002");
+									unsigned char dt = dataTypes->back();
+									if (dt==0x27)
+									{
+										//printf("\nRemove #003");
+										string* inputName = datas->back();
+										for (int j=0;j<getKeys->size();j++)
+										{
+											if (getKeys->at(j)==*inputName)
+											{
+												getKeys  ->erase(getKeys->begin()+j);
+												getValues->erase(getValues->begin()+j);
+												break;
+											}
+										}
+									}
+									else printf("\nREMOVING ANYTHING OTHER THAN GET[] HASNT BEEN IMPLEMENTED YET OK?!? SUE ME. (%i)", (int)dt);
+								}
+								else continue;
+							}
+							else printf("\n%s", "error enderman");
+							//printf("\nexecutingCommand:=0x00");
+							datas->clear();
+							dataTypes->clear();
+							executingCommand = 0x00;
+						}
+						}
+						/*************************************/
+						switch (c)
+						{
+						case 0x92:
+							if (!inIf) { inIf = true; break; }
+						//if ((c==0x92) && !inIf) inIf = true;
+						case 0x96:
+							if (inIf) { inIf = false; break; }
+						//else if (inIf && (c==0x96)) inIf = false;
+						case 0x93:
+						//else if (c==0x93) // Else
+						{
+							//printf("\n%s", "Checkpoint #001 - c=0x93");
+							if (searchForElseOrEndAtLevel==-1)
+							{
+								searchForEndAtLevel = curLevel-1;
+								//printf("\n%s", "[PROGRAM FLOW] found ELSE, searching for END");
+							}
+							else if (curLevel-1==searchForElseOrEndAtLevel)
+							{
+								searchForElseOrEndAtLevel = -1;
+								//printf("\n%s", "[PROGRAM FLOW] found ELSE, executing its contents");
+							}
+							//else if ()
+							break;
+						}
+						case 0x97: // Setvar
+							inSetvar = true;
+							i++;
+							setvarVar = &(inputs->at(confScript[i]-1));
+						break;
+						// Execute the stuff
+						case 0x20:{
+							dataTypes->push_back(c);
+							i++;
+							datas->push_back(&strings->at(confScript[i]-1));
+						}break;
+						case 0x21:{
+							dataTypes->push_back(c);
+							i++;
+							datas->push_back(&regexs->at(confScript[i]-1));
+						}break;
+						case 0x22:{
+							dataTypes->push_back(0x20);
+							i++;
+							//printf("\nnextbyte=%s", bin2hex(confScript[i]-1).c_str());
+							string* inputName = &inputs->at(confScript[i]-1);
+							/*if (*inputName=="host")
+							{
+								printf("\n%s%s", "Header host=", headerHost.c_str());
+								datas->push_back(&headerHost);
+								printf("\n%s%s", "datas->push_back(headerHost)=", datas->back()->c_str());
+								printf("\n%s%s", "datas->push_back(headerHost)=should=", headerHost.c_str());
+							}
+							else */
+							if (*inputName=="path")
+							{
+								datas->push_back(&requestPath);
+							}
+							else if (*inputName=="content")
+							{
+								datas->push_back(&requestContent);
+							}
+							else if (*inputName=="sourceip")
+							{
+								datas->push_back(&requestSender);
+							}
+							else printf("\n%s%s", "Could not interpret input ", inputName->c_str());
+						}break;
+						case 0x25:
+						{
+							i++;
+							string* inputName = &inputs->at(confScript[i]-1);
+						
+							for (int j=0;j<32;j++)
+							{
+								if (keys[j]==*inputName)
+								{
+									dataTypes->push_back(0x20);
+									datas->push_back(&values[j]);
+									break;
+								}
+								if (j==31)
+								{
+									if (verbose) printf("\n%s%s%s", "Notice: Header '", inputName->c_str(), "' not present!");
+									dataTypes->push_back(0x20);
+									datas->push_back(&emptyStr);
+								}
+							}
+						}
+						break;
+						case 0x27:{
+							if (datas->size()==0 && (executingCommand==0x7B || executingCommand==0x7C))
+							{
+								//printf("\ndatas added a get[...] input");
+								dataTypes->push_back(0x27);
+								i++;
+								datas->push_back(&(inputs->at(confScript[i]-1)));
+								break;
+							}
+							dataTypes->push_back(0x20);
+							i++;
+							string* inputName = &inputs->at(confScript[i]-1);
+							for (int j=0;j<getKeys->size();j++)
+							{
+								if (getKeys->at(j)==*inputName)
+								{
+									datas->push_back(&getValues->at(j));
+									goto foundGet;
+								}
+							}
+							if (verbose) printf("\n%s%s%s", "Notice: Get parameter '", inputName->c_str(), "' not present!");
+							datas->push_back(&emptyStr);
+						foundGet:
+							int lkasfdlkas = 0;
+						}break;
+						case 0x28:{
+							if (datas->size()==0 && (executingCommand==0x7B || executingCommand==0x7C))
+							{
+								dataTypes->push_back(0x28);
+								datas->push_back(&inputs->at(confScript[i]-1));
+								break;
+							}
+							dataTypes->push_back(0x20);
+							i++;
+							string* inputName = &inputs->at(confScript[i]-1);
+							for (int j=0;j<postKeys->size();j++)
+							{
+								if (postKeys->at(j)==*inputName)
+								{
+									datas->push_back(&postValues->at(j));
+									goto foundPost;
+								}
+							}
+							if (verbose) printf("\n%s%s%s", "Notice: Post parameter '", inputName->c_str(), "' not present!");
+							datas->push_back(&emptyStr);
+						foundPost:
+							int hhhhhhhh = 0;
+						}break;
+						case 0x29:{
+							if (datas->size()==0 && (executingCommand==0x7B || executingCommand==0x7C))
+							{
+								dataTypes->push_back(0x29);
+								datas->push_back(&inputs->at(confScript[i]-1));
+								break;
+							}
+							dataTypes->push_back(0x20);
+							i++;
+							string* inputName = &inputs->at(confScript[i]-1);
+							for (int j=0;j<varKeys->size();j++)
+							{
+								if (varKeys->at(j)==*inputName)
+								{
+									datas->push_back(&varValues->at(j));
+									goto foundVar;
+								}
+							}
+							printf("\n%s%s%s", "[Error] Variable '", inputName->c_str(), "' does not exist!");
+							goto bytecodeDone;
+							datas->push_back(&emptyStr);
+						foundVar:
+							int hhhhhhhh = 0;
+						}break;
+						case 0x41:{ // equals
+							unsigned char d1 = dataTypes->at(dataTypes->size()-2);
+							unsigned char d2 = dataTypes->back();
+							if (d1==0x20 && d2==0x20) // two strings
+							{
+								string* s2 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+								string* s1 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+							
+								if ((*s1)==(*s2))
+								{ // True
+									dataTypes->push_back(0x24);
+									datas->push_back(&boolTrue);
+								}
+								else
+								{ // False
+									dataTypes->push_back(0x24);
+									datas->push_back(&boolFalse);
+								}
+							}
+							else if (d1==0x20 && d2==0x21) // string & regex
+							{
+								//printf("\n%s", "Starting regex matching");
+								string* s2 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+								string* s1 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+								try
+								{
+									if (boost::regex_match(s1->c_str(), boost::regex(s2->c_str())))
+									{ // True
+										dataTypes->push_back(0x24);
+										datas->push_back(&boolTrue);
+									}
+									else
+									{ // False
+										dataTypes->push_back(0x24);
+										datas->push_back(&boolFalse);
+									}
+								}
+								catch (boost::regex_error& e)
+								{
+									dataTypes->push_back(0x24);
+									datas->push_back(&boolFalse);
+									printf("\n%s%s%s%s%s", "[Notice] Regex error in /", s2->c_str(), "/ while matching \"", s1->c_str(), "\":");
+									printRegexError(e);
+								}
+							}
+							else printf("\n%s", "Note: Did not execute equals yet, didn't find two strings");
+						}
+						break;
+						case 0x42: // contains
+						{
+							unsigned char d2 = dataTypes->back();
+							unsigned char d1 = dataTypes->at(dataTypes->size()-2);
+							if (d1==0x20 && d2==0x20) // two strings
+							{
+								string* s2 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+								string* s1 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+							
+								if (s1->find(*s2) != std::string::npos)
+								{ // True
+									dataTypes->push_back(0x24);
+									datas->push_back(&boolTrue);
+								}
+								else
+								{ // False
+									dataTypes->push_back(0x24);
+									datas->push_back(&boolFalse);
+								}
+							}
+							else if (d1==0x20 && d2==0x21)
+							{
+								
+								string* s2 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+								string* s1 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+								try
+								{
+									boost::smatch m;
+									if (boost::regex_search(
+										*s1,
+										m,
+										boost::regex(s2->c_str())
+									))
+									{ // True
+										dataTypes->push_back(0x24);
+										datas->push_back(&boolTrue);
+									}
+									else
+									{ // False
+										dataTypes->push_back(0x24);
+										datas->push_back(&boolFalse);
+									}
+								}
+								catch (boost::regex_error& e)
+								{
+									dataTypes->push_back(0x24);
+									datas->push_back(&boolFalse);
+									printf("\n%s%s%s%s%s", "[Notice] Regex error in /", s2->c_str(), "/ while matching \"", s1->c_str(), "\":");
+									printRegexError(e);
+								}
+							}
+							else printf("\n%s", "Note: Did not execute contains yet, didn't find two strings");
+						}break;
+						case 0x49:{ // concat
+							unsigned char d2 = dataTypes->back();
+							unsigned char d1 = dataTypes->at(dataTypes->size()-2);
+							if (d1==0x20 && d2==0x20) // two strings
+							{
+								string* s2 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+								string* s1 = datas->back();
+								datas->pop_back();
+								dataTypes->pop_back();
+								string asd = (*s1)+(*s2);
+								memoryHole->push_back(asd);
+								dataTypes->push_back(0x20);
+								datas->push_back(&(memoryHole->back()));
+							}
+							else printf("\n%s", "Note: Did not execute concat yet, didn't find two strings");
+						}break;
+						default:
+						if (c==0x43 || c==0x44 || c==0x45 || c==0x46 || c==0x47 || c==0x48)
+						{
+							unsigned char d1 = dataTypes->back();
+							unsigned char d2 = dataTypes->at(dataTypes->size()-2);
+							if (d1==0x24 && d2==0x24)
+							{
+								bool b1 = datas->back()==&boolTrue;
+								bool b2 = datas->at(datas->size()-2)==&boolTrue;
+								dataTypes->pop_back();
+								datas->pop_back();
+								datas->pop_back();
+								bool result = false;
+								if (c==0x43) result = b1&&b2; // And
+								if (c==0x44) result = b1||b2; // Or
+								if (c==0x45) result = !(b1&&b2); // Nand
+								if (c==0x46) result = !(b1||b2); // Nor
+								if (c==0x47) result = b1^b2; // Xor
+								if (c==0x48) result = !(b1^b2); // Xnor
+								if (result) datas->push_back(&boolTrue);
+								else datas->push_back(&boolFalse);
+							}
+							else printf("\n%s", "Note: Did not execute logic operator yet, didn't find two booleans");
+						}
+						else if (c==0x40) // Not
+						{
+							if (*(datas->back())=="") // False -> True
+							{
+								datas->pop_back();
+								datas->push_back(&boolTrue);
+							}
+							else // True -> False
+							{
+								datas->pop_back();
+								datas->push_back(&boolFalse);
+							}
+						}
+						else
+						{
+							if (inIf)
+							{
+								inIf = false;
+								if (*(datas->back())=="") // False
+								{
+									datas->clear();
+									dataTypes->clear();
+									searchForElseOrEndAtLevel = curLevel-1;
+									continue;
+								}
+								datas->clear();
+								dataTypes->clear();
+							}
+						}
+						// HERE WAS THE STUFF UNDER IMPORTANTMOD2141
+						//else
+							//printf("\nexecutingCommand=0x00");
+						if (inSetvar&&((c>=0x91&&c<=0x9F)||(c>=0x70&&c<=0x7F)))
+						{
+							inSetvar = false;
+							
+							//string* inputName = setvarVar;//datas->back();
+							//printf("\nSetting variable var[%s]", setvarVar->c_str());
+							for (int j=0;j<varKeys->size();j++)
+							{
+								if (varKeys->at(j)==*setvarVar)
+								{
+									varValues->at(j) = *(datas->back());
+									goto foundVarAndSet;
+								}
+							}
+							varKeys->push_back(*setvarVar);
+							varValues->push_back(*(datas->back()));
+						foundVarAndSet:
+							datas->clear();
+							dataTypes->clear();
+						}
+						if (c>=0x70 && c<=0x7F)
+						{
+							//printf("\nExecutingcommand set");
+							executingCommand = c;
+						}
+						else if (c==0x95)
+						{
+							goto bytecodeDone;
+							//break; // Exit
+						}
+						}
+					}
+				}
+			bytecodeDone:
+				if (verbose)
+				{
+					auto endTimeBytecode = std::chrono::system_clock::now();
+					auto elapsed = endTimeBytecode - startTimeBytecode;
+					double ms = double(elapsed.count())/1000000;
+					printf("\n%s%s%f%s", PUR, "Executing config script took: ", ms, "ms");
+				}
+				
+				// Use vector GET and POST values to reflect changes in requestContent & requestParams
+				//printf("\nOld request params=%s", requestParams.c_str());
+				requestParams = string("");
+				for (int i=0;i<getKeys->size();i++)
+				{
+					//printf("\nkey=", )
+					requestParams.append(getKeys->at(i));
+					requestParams += '=';
+					requestParams.append(getValues->at(i));
+					if (i!=getKeys->size()-1) requestParams += '&';
+				}
+				//printf("\nNew request params=%s", requestParams.c_str());
+				
+				auto startTimeResponse = std::chrono::system_clock::now();
+				std::string filePath = (std::string(directory)+std::string(requestPath));
+				/*if (boost::filesystem::is_directory(filePath))
+				{
+					filePath += "/";
+					requestPath += "/";
+				}*/ // TODO
+				int lastSlash = requestPath.rfind('/');
+				std::string filePathOnly = requestPath.substr(0, lastSlash+1);
+				std::string fileName = requestPath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
+				if (responseCode==200)
+				{
+		
+					bool tryingIndex = false;
+					bool triedAddingSlash = false;
+				tryFileAgain:
+					struct stat buffer;
+					//printf("\n%s\n", "Checkpoint 0");
+					if (stat(filePath.c_str(), &buffer)!=0) // If the file doesn't exist....
+					{
+						//printf("\n%s\n", "Checkpoint 1");
+						if (fileName.length()==0 && !tryingIndex)
+						{
+							//printf("\n%s\n", "Checkpoint 2");
+							tryingIndex = true;
+							filePath = filePathOnly+std::string(index);
+							goto tryFileAgain;
+						}
+						//printf("\n%s\n", "Checkpoint 3");
+						responseCode = 404;
+						responseText = "File not found";
+					}
+					else if (S_ISDIR(buffer.st_mode)) // If it's a directory...
+					{
+						//printf("\n%s\n", "Checkpoint 4");
+						if (filePath.back()!='/') filePath += "/";
+						filePath += index;
+						goto tryFileAgain;
+						/*struct stat buffer2;
+						if (stat(filePath.c_str(), &buffer)!=0)
+						{
+						}
+						else
+						{
+						}*/
+					}
+					if ((!triedAddingSlash) && (responseCode==404))
+					{
+						//printf("\n%s\n", "Checkpoint 5");
+						triedAddingSlash = true;
+						filePath += "/";
+						filePath += index;
+						goto tryFileAgain;
+					}
+				}
+				/*else
+				{
+					responseCode = 200;
+					responseText = "Zomg file found but zomg error lol";
+				}*/
+			
+				std::string header;
+			
+				std::string contentType = "text/plain";
+				bool isPhpFile = false, isPythonFile = false, isPerlFile = false;
+				if (responseCode==200 || responseCode==302)
+				{
+					int fpLength = filePath.length();
+					std::string ext3 = std::string(""), ext2 = std::string(""), ext4 = std::string("");
+					if (fpLength>=3) ext2 = filePath.substr(fpLength-3, 3);
+					if (fpLength>=4) ext3 = filePath.substr(fpLength-4, 4);
+					if (fpLength>=5) ext4 = filePath.substr(fpLength-5, 5);
+					if (ext3==".php")
+					{
+						isPhpFile = true;
+						if (php) contentType = "text/html";
+						else contentType = "text/plain";
+					}
+					else if (ext2==".py")
+					{
+						isPythonFile = true;
+						if (python) contentType = "text/html";
+						else contentType = "text/plain";
+					}
+					else if (ext2==".pl")
+					{
+						isPerlFile = true;
+						if (perl) contentType = "text/html";
+						else contentType = "text/plain";
+					}
+					else if (ext3==".htm" || ext4==".html") contentType = "text/html";
+					else if (ext3==".txt") contentType = "text/plain";
+					else if (ext3==".pdf") contentType = "application/pdf";
+					else if (ext3==".ogg") contentType = "application/ogg";
+					else if (ext3==".xml") contentType = "application/xml";
+					else if (ext3==".xsl") contentType = "application/xml";
+					else if (ext3==".zip") contentType = "application/zip";
+					else if (ext4==".midi") contentType = "audio/midi";
+					else if (ext4==".mpeg") contentType = "audio/mpeg";
+					else if (ext3==".wav") contentType = "audio/x-wav";
+					else if (ext3==".bmp") contentType = "image/bmp";
+					else if (ext3==".gif") contentType = "image/gif";
+					else if (ext3==".jpg" || ext4==".jpeg") contentType = "image/jpeg";
+					else if (ext3==".png") contentType = "image/png";
+					else if (ext3==".tif" || ext4==".tiff") contentType = "image/tiff";
+					else if (ext3==".ico") contentType = "image/x-icon";
+					else if (ext3==".css") contentType = "text/css";
+					else if (ext3==".mpg" || ext4=="mpeg") contentType = "video/mpeg";
+					else if (ext3==".avi") contentType = "video/x-msvideo";
+					else
+					{
+						contentType = std::string("application/octet-stream\r\nContent-Disposition: attachment; filename=")+fileName+std::string(";");
+					}
+				}
+			
+				if (responseCode==200 || responseCode==302)
+				{
+					header = "HTTP/1.1 "+std::to_string(responseCode)+" "+responseText+"\r\nServer: Jesbus' server\r\nKeep-Alive: 300\r\nTransfer-Encoding: chunked\r\nConnection: close\r\nContent-Type: "+std::string(contentType)+"\r\n"+addedHeaders+"\r\n"; // maybe just accept the fact that php-cgi returns headers?
+				}
+				else
+				{
+					header = "HTTP/1.1 "+std::to_string(responseCode)+" "+responseText+"\r\nServer: Jesbus' server\r\nKeep-Alive: 300\r\nContent-Length: "+std::to_string(3+1+responseText.length())+"\r\nConnection: close\r\nContent-Type: text/plain\r\n"+addedHeaders+"\r\n"+std::to_string(responseCode)+" "+responseText;
+				}
+				send(new_fd, header.c_str(), header.length(), 0);
+				if (responseCode==200)
+				{
+					FILE* fp;
+					char result [256];
+					if (php&&isPhpFile)
+					{
+						//printf("%s", requestParams.c_str());
+						/*for(int i=0; i<requestParams.length(); i++)
+						{
+							switch(requestParams[i])
+							{
+								case '&':
+								requestParams[i] = ' ';
+								break;
+							}
+						}*/
+						//if (requestType=="GET")
+						{
+							fp = popen((std::string("php -f ")+filePath+std::string(" \"")+requestParams+std::string("\" \"")+requestContent+std::string("\"")).c_str(), "r");
+						}
+						/*else // POST
+						{
+							std::string hi("export REDIRECT_STATUS=true\nexport SCRIPT_FILENAME=");
+							hi += filePath;
+							hi += std::string("\nexport REQUEST_METHOD=POST\nexport GATEWAY_INTERFACE=CGI/1.1\nexport CONTENT_TYPE=application/x-www-form-urlencoded;\nexport QUERY_STRING=\"");
+							hi += requestParams;
+							hi += std::string("\"\nexport CONTENT_LENGTH=");
+							hi += std::to_string(requestContent.length());
+							fp = popen((
+								hi+
+								std::string("\n")+
+								std::string("echo \"")+
+								requestContent+
+								std::string("\" | php-cgi")// -q -f ")+
+								//filePath
+							).c_str(),"r");
+						}*/
+					}
+					else if (perl&&isPerlFile)
+					{
+						fp = popen((string("perl ")+filePath+string(" \"")+requestParams+string("\" \"")+requestContent+string("\"")).c_str(),"r");
+					}
+					else if (python&&isPythonFile)
+					{
+						stringstream getArgs;
+						getArgs << '{';
+						int i = 0;
+						if (requestParams.length()!=0) getArgs << "\\\"";
+						bool seenEquals = false;
+						for(i=0; i<requestParams.length(); i++)
+						{
+							switch(requestParams[i])
+							{
+								case '"':
+								getArgs << "\\\\\\\"";
+								break;
+								case '&':
+								if (!seenEquals) getArgs << "\\\":\\\"";
+								getArgs << "\\\",\\\"";
+								seenEquals = false;
+								break;
+								case '=':
+								getArgs << "\\\":\\\"";
+								seenEquals = true;
+								break;
+								default:
+								getArgs << requestParams[i];
+								break;
+							}
+						}
+						if (i!=0)
+						{
+							if (!seenEquals) getArgs << "\\\":\\\"";
+							getArgs << "\\\"";
+						}
+						getArgs << '}';
+					
+					
+						stringstream postArgs;
+						postArgs << '{';
+						i = 0;
+						if (requestContent.length()!=0) postArgs << "\\\"";
+						seenEquals = false;
+						for(i=0; i<requestContent.length(); i++)
+						{
+							switch(requestContent[i])
+							{
+								case '"':
+								postArgs << "\\\\\\\"";
+								break;
+								case '&':
+								if (!seenEquals) postArgs << "\\\":\\\"";
+								postArgs << "\\\",\\\"";
+								seenEquals = false;
+								break;
+								case '=':
+								seenEquals = true;
+								postArgs << "\\\":\\\"";
+								break;
+								default:
+								postArgs << requestContent[i];
+								break;
+							}
+						}
+						if (i!=0)
+						{
+							if (!seenEquals) postArgs << "\\\":\\\"";
+							postArgs << "\\\"";
+						}
+						postArgs << '}';
+						fp = popen((string("python ")+filePath+string(" ")+getArgs.str()+string(" ")+postArgs.str()).c_str(),"r");
+					}
+					else
+					{
+						fp = fopen(filePath.c_str(), "r");
+					}
+					if (responseCode==200)
+					{
+						int resultSize = 0;
+						while ((resultSize=(int)fread(result,1,256,fp))!=0)
+						{
+							std::stringstream strStream;
+							strStream << std::hex << resultSize;
+							std::string chunkSize(strStream.str());
+				
+							send(new_fd, chunkSize.c_str(), chunkSize.length(), 0);
+							send(new_fd, "\r\n", 2, 0);
+							send(new_fd, result, resultSize, 0);
+							send(new_fd, "\r\n", 2, 0);
+						}
+						std::string endingChunk = "0\r\n\r\n";
+						send(new_fd, endingChunk.c_str(), endingChunk.length(), 0);
+						fclose(fp);
+					}
+				}
+				if (verbose)
+				{
+					auto endTimeResponse = std::chrono::system_clock::now();
+					auto elapsed = endTimeResponse - startTimeResponse;
+					double ms = double(elapsed.count())/1000000;
+					printf("\n%s%s%f%s", PUR, "Generating & sending response took: ", ms, "ms");
+				}
+			}
+			close(new_fd);
+			if (requestLocation.length()!=0)
+			{
+				if (verbose)
+				{
+					if (requestType=="GET") printf("%s%s", "\n##-------- Request is: GET to ", requestLocation.c_str());
+					else printf("%s%s%s%s", "\n##-------- Request is: POST to ", requestLocation.c_str(), "\nPOST data:\n", requestContent.c_str());
+				}
+				else if (!quiet)
+				{
+					if (requestType=="GET") printf("\n%s%s", "GET ", requestLocation.c_str());
+					else printf("%s%s%s%s%s", "POST ", requestLocation.c_str(), "\nPost data: ", requestContent.c_str(), "\n");
+				}
+			}
+			if (!verbose && !quiet)
+			{
+				if (responseCode!=200)
+				{
+					printf("\n%s%i%s%s", "Response: ", responseCode, " ", responseText.c_str());
+				}
+			}
+			else if (verbose)
+			{
+				printf("%s%i%s%s%s", "\n##-------- Response status: ", responseCode, " ", responseText.c_str(), "\n");
+			}
+			if (!verbose && !quiet) printf("\n%s", "##-----------------------");
+			exit(0);
+		}
+		close(new_fd);  // parent doesn't need this
+	}
+
+	return 0;
+}
+

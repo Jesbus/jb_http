@@ -1,0 +1,80 @@
+BYTECODE FORMAT:
+
+PROGRAM FLOW CONTROL:
+	0x91 - END - Pop stack
+	0x92 - IF - If following statement evaluates to true, push stack. otherwise search for next ELSE, ELSEIF, or END
+	0x93 - ELSE - If previous IF evaluated to true, search for END.
+	0x94 - ELSEIF - If previous IF evaluated to true, search for END. Otherwise, if following statement evaluates to true
+	0x95 - EXIT
+	0x96 - THEN - Appropriate after IF statement, if not used behaviour is slightly unpredictable
+	0x97 - SETVAR - followed by first a varname [1 byte ref. to string] , then a full-fledged if statement thingamajiggamathong (lol wtf)
+DATA:
+	0x20 - STRING - [1 byte ref. to string]
+	0x21 - REGEX - [1 byte ref. to regex]
+	0x22 - INPUT - [1 byte ref. to script input]
+	0x23 - PLACEHOLDER (should not appear in actual bytecode!!! just in data stack at compiletime!)
+	0x24 - BOOLEAN - [string of length 1 = true, string of length 0 = false]
+	0x25 - HEADER - [1 byte ref. to string]
+	0x26 - START OF BRACKETED PART (should not appear in actual bytecode!!! just in data AND operator stack at compiletime!)
+	0x27 - GET - similar to HEADER
+	0x28 - POST - very similar to GET
+	0x29 - VAR - very similar to POST
+OPERATORS:
+	0x40 - not [bool]
+	0x41 - [str] equals [str|regex]
+	0x42 - [str] contains [str|regex]
+	0x43 - and
+	0x44 - or
+	0x45 - nand
+	0x46 - nor
+	0x47 - xor
+	0x48 - xnor
+	
+	0x49 - [string] concat [string]
+	0x4A - startswith
+	0x4B - endswith
+	
+	0x4C - in (should not appear in bytecode!)
+	0x4D - replace
+	0x4E - with (should not appear in bytecode!)
+	
+	...
+OPERATIONS:
+	///// 0x70 - Redirect [string] (DISCONTINUED, MADE UNNECESSARY BECAUSE OF ResponseCode AND Header
+	0x71 - ResponseCode [string]
+	0x72 - ResponseStatus [string]
+	0x73 - Header [string]
+	0x74 - Rewrite [regex] [string] CANCELLED
+	0x77 - Nop
+	0x78 - SetPath [string]
+	0x79 - ReplacePath [string|regex] [string]
+	0x7A - Recurse
+	
+	0x7B - Set [input 0x27|0x28|0x29] [string]
+	0x7C - Remove [input 0x27|0x28|0x29]
+	0x7D - RemoveAllGet
+	0x7E - RemoveAllPost
+	0x7F - Log [string]
+	
+	
+The bytecode uses reverse-polish notation (aka operator=suffix)
+
+
+compiling reverse polish stuff:
+	not "a" equals "b"
+	
+Steps:
+not		=>		Put on operator stack	(operator 0x41)
+"a"		=> 		Put on data stack		(string 0x01)
+equals	=>		Put on operator stack	(operator 0x40)
+"b"		=>		Put on data stack		(string 0x02)
+Detect that top of data stack (equals) matches top of operator stack (two strings), pop them and push a placeholder onto the data stack
+Detect that top of data stack (not) matches top of operator stack (placeholder bool), pop them and push a placeholder onto the data stack
+
+Note that compile time & memory needed increases linearly with the input script.
+
+Output bytecode would become:
+string "a"  string "b"  equals  not
+0x20 0x01   0x20 0x02   0x40    0x41
+
+
