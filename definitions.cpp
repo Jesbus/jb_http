@@ -1,5 +1,7 @@
 #include<string>
 #include<boost/regex.hpp>
+#include <sys/stat.h>
+#include <vector>
 
 #include "definitions.h"
 #include "main.h"
@@ -156,4 +158,54 @@ void parseParamString(string paramString, vector<string>* keys, vector<string>* 
 		values->push_back(buff.str());
 	}
 	buff.str("");
+}
+
+bool searchForFile(char* directory, string& requestPath, vector<string>& indexes)
+{
+	bool exists = false;
+	
+	
+	string filePath = (string(directory)+string(requestPath));
+	int lastSlash = filePath.rfind('/');
+	string filePathOnly = filePath.substr(0, lastSlash+1);
+	string fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
+	int tryingIndex = -1;
+	bool triedAddingSlash = false;
+	
+tryFileAgain:
+	lastSlash = filePath.rfind('/');
+	filePathOnly = filePath.substr(0, lastSlash+1);
+	fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
+	struct stat buffer;
+	if (stat(filePath.c_str(), &buffer)!=0) // If the file doesn't exist....
+	{
+		if (tryingIndex<indexes.size()-1)
+		{
+			tryingIndex++;
+			filePath = filePathOnly+indexes.at(tryingIndex);
+			goto tryFileAgain;
+		}
+		exists = false;
+	}
+	else if (S_ISDIR(buffer.st_mode)) // If it's a directory...
+	{
+		if (filePath.back()!='/') filePath += "/";
+		fileName = "";
+		filePath += indexes.at(0);
+		tryingIndex = 0;
+		if (debug) printf("\nIt's a directory! added a / and cleared the fileName");
+		goto tryFileAgain;
+	}
+	else return true;
+	if ((!triedAddingSlash) && (!exists))
+	{
+		triedAddingSlash = true;
+		filePath += "/";
+		fileName = "";
+		tryingIndex = -1;
+		if (debug) printf("\nTrying index at [%i]", tryingIndex);
+		goto tryFileAgain;
+	}
+	
+	return exists;
 }

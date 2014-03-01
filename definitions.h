@@ -19,3 +19,4 @@ extern std::string bin2hex(const std::string& input);
 extern std::string bin2hex(char c);
 extern string generateParamString(vector<string>* keys, vector<string>* values);
 extern void parseParamString(string paramString, vector<string>* keys, vector<string>* values);
+bool searchForFile(char* directory, string& requestPath, vector<string>& indexes);

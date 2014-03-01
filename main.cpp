@@ -495,48 +495,12 @@ int main2(int argc, char* argv[])
 			////////////////////////////////////////////////
 			// #### -------------- Search for requested file
 			
-			string filePath = (string(directory)+string(requestPath));
-			int lastSlash = filePath.rfind('/');
-			string filePathOnly = filePath.substr(0, lastSlash+1);
-			string fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
-			int tryingIndex = -1;
-			bool triedAddingSlash = false;
-			
-		tryFileAgain:
-			lastSlash = filePath.rfind('/');
-			filePathOnly = filePath.substr(0, lastSlash+1);
-			fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
-			struct stat buffer;
-			if (stat(filePath.c_str(), &buffer)!=0) // If the file doesn't exist....
+			if (!searchForFile(directory, requestPath, indexes))
 			{
-				if (tryingIndex<indexes.size()-1)
-				{
-					tryingIndex++;
-					filePath = filePathOnly+indexes.at(tryingIndex);
-					goto tryFileAgain;
-				}
 				responseCode = 404;
 				responseText = "File not found";
 			}
-			else if (S_ISDIR(buffer.st_mode)) // If it's a directory...
-			{
-				if (filePath.back()!='/') filePath += "/";
-				fileName = "";
-				filePath += indexes.at(0);
-				tryingIndex = 0;
-				if (debug) printf("\nIt's a directory! added a / and cleared the fileName");
-				goto tryFileAgain;
-			}
-			if ((!triedAddingSlash) && (responseCode==404))
-			{
-				triedAddingSlash = true;
-				filePath += "/";
-				fileName = "";
-				tryingIndex = -1;
-				if (debug) printf("\nTrying index at [%i]", tryingIndex);
-				goto tryFileAgain;
-			}
-
+			
 			string headerContentType = "text/plain";
 			string headerContentDisposition = "";
 			string headerServer = "Jesbus' server";
@@ -636,6 +600,8 @@ int main2(int argc, char* argv[])
 					headerKeepAlive
 				);
 				
+				filePath = (string(directory)+string(requestPath));
+			
 				// Use vector GET and POST values to reflect configScript's changes in requestContent & requestParams
 				if (getChanged)
 				{
