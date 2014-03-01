@@ -1,0 +1,55 @@
+Valid configuration scripts should be described by the following grammar:
+
+<script> --> <line>\n<lines>
+<script> --> <line>
+<line> --> <any_whitespaces><statement>
+<line> --> <any_whitespaces><comment>
+<comment> --> #<string_no_newline>
+
+<statement> --> if <expression_bool><newline><script><newline>end
+<statement> --> if <expression_bool><newline><script><newline>else<newline><script><newline>end
+
+<newline> --> \n
+<newline> --> \r\n
+
+<expression_bool> --> ( <expression_bool> )
+<expression_bool> --> <expression_string> equals <expression_string>
+<expression_bool> --> <expression_string> equals <regex>
+<expression_bool> --> <expression_string> contains <expression_string>
+<expression_bool> --> <expression_string> contains <regex>
+<expression_bool> --> <expression_bool> <logic_op> <expression_bool>
+<expression_bool> --> not <expression_bool>
+
+<expression_string> --> ( <expression_string> )
+<expression_string> --> <simple_expression_string>
+<expression_string> --> <expression_string> concat <expression_string>
+<expression_string> --> <expression_string> . <expression_string>
+<expression_string> --> in <expression_string> replace <expression_string> with <expression_string>
+
+<simple_expression_string> --> ( <expression_string> )
+<simple_expression_string> --> "<string>"
+<simple_expression_string> --> path
+<simple_expression_string> --> content
+<simple_expression_string> --> sourceip
+<simple_expression_string> --> getparams
+<simple_expression_string> --> postparams
+<simple_expression_string> --> requesttype
+<simple_expression_string> --> responsecode
+<simple_expression_string> --> header[<string_no_spaces>]
+<simple_expression_string> --> var[<string_no_spaces>]
+<simple_expression_string> --> get[<string_no_spaces>]
+<simple_expression_string> --> post[<string_no_spaces>]
+
+<logic_op> --> and
+<logic_op> --> or
+<logic_op> --> nand
+<logic_op> --> nor
+<logic_op> --> xor
+<logic_op> --> xnor
+
+## The following should speak for themselves:
+<string>
+<string_no_newline>
+<string_no_spaces>
+<any_whitespaces>
+<regex> ## should be something like: /bla ([a-z]{3})/
