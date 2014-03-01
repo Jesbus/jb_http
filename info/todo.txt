@@ -1,3 +1,10 @@
-TODO
+Normal todo items
 - Add regex match results available in config script
 - Make script interpreter recheck file existance when script finishes, and when script recurses
+
+GIANT TODO ITEMS
+------------------
+-- HTTPS
+------------------
+-- Websockets
+------------------
