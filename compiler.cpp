@@ -15,12 +15,10 @@ using namespace std;
 string compileConfigScript(string confFile, vector<string>* strings, vector<string>* regexs, vector<string>* inputs)
 {
 	auto startTimeCompile = std::chrono::system_clock::now();
-	std::stringstream byteCode;
-	// Prepiling (lol.)
-	std::stringstream curThing;
 	
-	// Compiling (lol.)
-	std::stringstream theThing;
+	std::stringstream byteCode;
+	std::stringstream curThing; // current thing
+	
 	vector<unsigned char>* operatorStack = new vector<unsigned char>();
 	vector<unsigned char>* dataStack = new vector<unsigned char>();
 	
