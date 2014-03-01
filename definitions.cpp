@@ -68,14 +68,9 @@ bool replace(string& str, const string& from, const string& to)
 
 bool replaceByPointers(string& str, string* from, string* to)
 {
-	if (debug) printf("replaceByPointer(%s,%s,%s)", str.c_str(), from->c_str(), to->c_str());
-	//if (debug) printf("\nreplaceByPointers(.., .., ..) #0");
 	size_t start_pos = str.find(*from);
-	//if (debug) printf("\nreplaceByPointers(.., .., ..) #1");
 	if (start_pos == string::npos) return false;
-	//if (debug) printf("\nreplaceByPointers(.., .., ..) #2");
 	str.replace(start_pos, from->length(), *to);
-	//if (debug) printf("\nreplaceByPointers(.., .., ..) #3");
 	return true;
 }
 
@@ -165,20 +160,16 @@ bool searchForFile(char* directory, string& requestPath, vector<string>& indexes
 	bool exists = true;
 	
 	filePath = string(directory)+requestPath;
-	printf("\n$0 filePath=%s", filePath.c_str());
 	int lastSlash = filePath.rfind('/');
 	string filePathOnly = filePath.substr(0, lastSlash+1);
 	fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash);
-	printf("\n$1 fileName=%s", fileName.c_str());
 	int tryingIndex = -1;
 	bool triedAddingSlash = false;
 	
 	fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
 tryFileAgain:
-	printf("\nSearching for file... fileName=%s", fileName.c_str());
 	lastSlash = filePath.rfind('/');
 	filePathOnly = filePath.substr(0, lastSlash+1);
-	printf("\n$1.5 fileName=%s", fileName.c_str());
 	struct stat buffer;
 	if (stat(filePath.c_str(), &buffer)!=0) // If the file doesn't exist....
 	{
@@ -187,7 +178,6 @@ tryFileAgain:
 			tryingIndex++;
 			fileName = indexes.at(tryingIndex);
 			filePath = filePathOnly+fileName;
-			if (debug) printf("\nChecking index file %s", indexes.at(tryingIndex).c_str());
 			goto tryFileAgain;
 		}
 		exists = false;
@@ -198,25 +188,16 @@ tryFileAgain:
 		fileName = "";
 		filePath += indexes.at(0);
 		tryingIndex = 0;
-		if (debug) printf("\nIt's a directory! added a / and cleared the fileName");
 		goto tryFileAgain;
 	}
 	else exists = true;
-	printf("\n$2 fileName=%s", fileName.c_str());
 	if ((!triedAddingSlash) && (!exists))
 	{
 		triedAddingSlash = true;
 		filePath += "/";
 		fileName = "";
 		tryingIndex = -1;
-		if (debug) printf("\nTrying index at [%i]", tryingIndex);
 		goto tryFileAgain;
 	}
-	printf("\n$3 fileName=%s", fileName.c_str());
-	if (debug) printf("\nFile searching done. filePath=%s fileName=%s", filePath.c_str(), fileName.c_str());
-	printf("\n$4 fileName=%s", fileName.c_str());
-	
-	if ( exists) printf("\nexists=true ");
-	if (!exists) printf("\nexists=false");
 	return exists;
 }
