@@ -160,15 +160,14 @@ void parseParamString(string paramString, vector<string>* keys, vector<string>* 
 	buff.str("");
 }
 
-bool searchForFile(char* directory, string& requestPath, vector<string>& indexes)
+bool searchForFile(char* directory, string& requestPath, vector<string>& indexes, string& filePath, string& fileName)
 {
 	bool exists = false;
 	
-	
-	string filePath = (string(directory)+string(requestPath));
+	filePath = (string(directory)+string(requestPath));
 	int lastSlash = filePath.rfind('/');
 	string filePathOnly = filePath.substr(0, lastSlash+1);
-	string fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
+	fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
 	int tryingIndex = -1;
 	bool triedAddingSlash = false;
 	

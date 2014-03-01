@@ -495,7 +495,9 @@ int main2(int argc, char* argv[])
 			////////////////////////////////////////////////
 			// #### -------------- Search for requested file
 			
-			if (!searchForFile(directory, requestPath, indexes))
+			string filePath, fileName;
+			
+			if (!searchForFile(directory, requestPath, indexes, filePath, fileName))
 			{
 				responseCode = 404;
 				responseText = "File not found";
