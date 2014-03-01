@@ -10,7 +10,7 @@
 #include "parser.h"
 #include "definitions.h"
 
-using namespace std;
+using namespace std; // this is a commit test
 
 string compileConfigScript(string confFile, vector<string>* strings, vector<string>* regexs, vector<string>* inputs)
 {
