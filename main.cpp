@@ -501,7 +501,10 @@ int main2(int argc, char* argv[])
 			{
 				responseCode = 404;
 				responseText = "File not found";
+				printf("\nFile does not exist. response set to 404");
 			}
+			
+			printf("\nafter searchForFile()");
 			
 			string headerContentType = "text/plain";
 			string headerContentDisposition = "";
@@ -572,6 +575,7 @@ int main2(int argc, char* argv[])
 				
 				bool getChanged = false;
 				bool postChanged = false;
+				bool requestPathChanged = false;
 				string addedHeaders = "";
 				
 				executeConfigScript
@@ -586,6 +590,7 @@ int main2(int argc, char* argv[])
 					requestSender,
 					getChanged,
 					postChanged,
+					requestPathChanged,
 					getKeys,
 					getValues,
 					postKeys,
@@ -602,7 +607,7 @@ int main2(int argc, char* argv[])
 					headerKeepAlive
 				);
 				
-				filePath = (string(directory)+string(requestPath));
+				if (requestPathChanged) filePath = (string(directory)+string(requestPath));
 			
 				// Use vector GET and POST values to reflect configScript's changes in requestContent & requestParams
 				if (getChanged)

@@ -24,6 +24,7 @@ void executeConfigScript
 	string& requestSender,
 	bool& getChanged,
 	bool& postChanged,
+	bool& requestPathChanged,
 	vector<string>* getKeys,
 	vector<string>* getValues,
 	vector<string>* postKeys,
@@ -189,6 +190,7 @@ byteCodeAgain:
 					if (datas->size()>=1)
 					{
 						requestPath = datas->back();
+						requestPathChanged = true;
 					}
 					else continue;
 				}

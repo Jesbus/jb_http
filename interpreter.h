@@ -15,6 +15,7 @@ extern void executeConfigScript
 	string& requestSender,
 	bool& getChanged,
 	bool& postChanged,
+	bool& requestPathChanged,
 	vector<string>* getKeys,
 	vector<string>* getValues,
 	vector<string>* postKeys,
