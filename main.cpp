@@ -50,9 +50,13 @@ void *get_in_addr(struct sockaddr *sa)
 	}
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
-
-
 int main(int argc, char* argv[])
+{
+	main(argc, argv);
+	printf("\n");
+	return 0;
+}
+int main2(int argc, char* argv[])
 {
 	char* port = "80";
 	char* directory = ".";
@@ -85,12 +89,18 @@ int main(int argc, char* argv[])
 		else if (arg=="-b" || arg=="--backlog") { backlog = std::stoi(std::string(argv[i+1])); i++; }
 		else if (arg=="-p" || arg=="--port")
 		{
-			port = argv[i+1]; i++;
-			/*if (std::to_string(std::stoi(std::string(port)))!=port)
+			int iPort = std::stoi(std::string(port));
+			if (std::to_string(iPort)!=port)
 			{
-				printf("%s", "Port has to be an int\n");
+				printf("\nPort has to be an int");
 				return 0;
-			}*/
+			}
+			if (iPort<0 || iPort>=65536)
+			{
+				printf("\nPort has to be from 0 to 65535");
+			}
+			port = argv[i+1];
+			i++;
 		}
 		else if (arg=="-pyh" || arg=="--pythonh")
 		{
@@ -103,7 +113,7 @@ int main(int argc, char* argv[])
 			printf("\n%s##%s That's it.. Good fortune on the road.", YEL, NRM);
 			printf("\n%s###########################%s\n", YEL, NRM);
 			return 0;
-		}//parse_str($str, $output);
+		}
 		else if (arg=="-peh" || arg=="--perlh")
 		{
 			printf(  "%s###########################", YEL);
@@ -111,7 +121,7 @@ int main(int argc, char* argv[])
 			printf("\n%s##%s Perl scripts are executed when having the extension .pl", YEL, NRM);
 			printf("\n%s##%s GET parameters  : $ARGV[0]", YEL, NRM);
 			printf("\n%s##%s POST parameters : $ARGV[1]", YEL, NRM);
-			printf("\n%s##%s You'll have to parse them yourself xD", YEL, NRM);
+			printf("\n%s##%s You'll have to parse them yourself.", YEL, NRM);
 			printf("\n%s###########################%s\n", YEL, NRM);
 			return 0;
 		}
@@ -176,7 +186,7 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			printf("%s%s%s", "Incomprehended argument: ", arg.c_str(), "\n");
+			printf("\nIncomprehended argument: %s", arg.c_str());
 			return 0;
 		}
 	}
@@ -232,7 +242,7 @@ int main(int argc, char* argv[])
 		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1)
 		{
 			close(sockfd);
-			perror("Failed to bind to port");
+			perror("\nFailed to bind to port");
 			continue;
 		}
 
@@ -242,7 +252,7 @@ int main(int argc, char* argv[])
 	if (p == NULL) 
 	{
 		//fprintf(stderr, "Failed to bind to port\n");
-		printf("%s%s%s", "Failed to bind to port ", port, "\n");
+		printf("Failed to bind to port %i\n", port);
 		return 2;
 	}
 
@@ -292,23 +302,13 @@ int main(int argc, char* argv[])
 		byteCode = compileConfigScript(confFile, strings, regexs, inputs);
 	}
 	string byteCodeString = byteCode;//.str();
-	//printf("\n%s%i", "byteCodeString.length()=", byteCodeString.length());
 	int byteCodeStringLength = byteCodeString.length();
 	
 	char* confScript = new char[byteCodeStringLength+1];
 	for (int i=0;i<byteCodeStringLength;i++){confScript[i]='a';}
 	confScript[byteCodeStringLength] = (char)0x00;
-	//printf("\n%s%i", "strlen(confScript)=", strlen(confScript));
-	//printf("\n%s\n", confScript);
-	
-	//printf("\n%s%i", "indeed statement end ", byteCodeStringLength);
-	//printf("\n%s%i", "confScript size=", sizeof(confScript));
 	
 	strncpy(confScript, byteCodeString.c_str(), byteCodeStringLength);
-	//printf("\n%s%i", "strlen(confScript)=", strlen(confScript));
-	
-	//printf("\nconfScript=%s\n", confScript);
-	//printf("\n%s%i\n", "confScript size=", sizeof(confScript));
 	
 	if (!quiet)
 	{
