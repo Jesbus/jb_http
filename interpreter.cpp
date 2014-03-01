@@ -32,7 +32,12 @@ void executeConfigScript
 	vector<string>* regexs,
 	vector<string>* inputs,
 	string keys[32],
-	string values[32]
+	string values[32],
+	
+	string& headerContentType,
+	string& headerContentDisposition,
+	string& headerServer,
+	string& headerKeepAlive
 )
 {
 	auto startTimeBytecode = std::chrono::system_clock::now();
@@ -114,7 +119,7 @@ byteCodeAgain:
 			{
 			if (executingCommand!=0x00) // IMPORTANTMOD2141
 			{
-				if (executingCommand==0x70)
+				/*if (executingCommand==0x70)
 				{
 					if (datas->size()>=1)
 					{
@@ -127,7 +132,8 @@ byteCodeAgain:
 					}
 					else continue;
 				}
-				else if (executingCommand==0x71)
+				else */
+				if (executingCommand==0x71)
 				{
 					if (datas->size()>=1)
 					{

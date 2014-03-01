@@ -23,5 +23,10 @@ extern void executeConfigScript
 	vector<string>* regexs,
 	vector<string>* inputs,
 	string keys[32],
-	string values[32]
+	string values[32],
+	
+	string& headerContentType,
+	string& headerContentDisposition,
+	string& headerServer,
+	string& headerKeepAlive
 );

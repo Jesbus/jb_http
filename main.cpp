@@ -50,9 +50,10 @@ void *get_in_addr(struct sockaddr *sa)
 	}
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
+int main2(int argc, char* argv[]);
 int main(int argc, char* argv[])
 {
-	main(argc, argv);
+	main2(argc, argv);
 	printf("\n");
 	return 0;
 }
@@ -301,14 +302,12 @@ int main2(int argc, char* argv[])
 		
 		byteCode = compileConfigScript(confFile, strings, regexs, inputs);
 	}
-	string byteCodeString = byteCode;//.str();
-	int byteCodeStringLength = byteCodeString.length();
+	int byteCodeLength = byteCode.length();
+	char* confScript = new char[byteCodeLength+1];
+	for (int i=0;i<byteCodeLength;i++){confScript[i]='a';}
+	confScript[byteCodeLength] = (char)0x00;
 	
-	char* confScript = new char[byteCodeStringLength+1];
-	for (int i=0;i<byteCodeStringLength;i++){confScript[i]='a';}
-	confScript[byteCodeStringLength] = (char)0x00;
-	
-	strncpy(confScript, byteCodeString.c_str(), byteCodeStringLength);
+	strncpy(confScript, byteCode.c_str(), byteCodeLength);
 	
 	if (!quiet)
 	{
@@ -491,6 +490,113 @@ int main2(int argc, char* argv[])
 					else printf("%sPOST%s %s\nPost data: %s", GRE, NRM, requestLocation.c_str(), requestContent.c_str());
 				}
 			}
+			
+			
+			////////////////////////////////////////////////
+			// #### -------------- Search for requested file
+			
+			string filePath = (string(directory)+string(requestPath));
+			int lastSlash = filePath.rfind('/');
+			string filePathOnly = filePath.substr(0, lastSlash+1);
+			string fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
+			int tryingIndex = -1;
+			bool triedAddingSlash = false;
+			
+		tryFileAgain:
+			lastSlash = filePath.rfind('/');
+			filePathOnly = filePath.substr(0, lastSlash+1);
+			fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
+			struct stat buffer;
+			if (stat(filePath.c_str(), &buffer)!=0) // If the file doesn't exist....
+			{
+				if (tryingIndex<indexes.size()-1)
+				{
+					tryingIndex++;
+					filePath = filePathOnly+indexes.at(tryingIndex);
+					goto tryFileAgain;
+				}
+				responseCode = 404;
+				responseText = "File not found";
+			}
+			else if (S_ISDIR(buffer.st_mode)) // If it's a directory...
+			{
+				if (filePath.back()!='/') filePath += "/";
+				fileName = "";
+				filePath += indexes.at(0);
+				tryingIndex = 0;
+				if (debug) printf("\nIt's a directory! added a / and cleared the fileName");
+				goto tryFileAgain;
+			}
+			if ((!triedAddingSlash) && (responseCode==404))
+			{
+				triedAddingSlash = true;
+				filePath += "/";
+				fileName = "";
+				tryingIndex = -1;
+				if (debug) printf("\nTrying index at [%i]", tryingIndex);
+				goto tryFileAgain;
+			}
+
+			string headerContentType = "text/plain";
+			string headerContentDisposition = "";
+			string headerServer = "Jesbus' server";
+			string headerKeepAlive = "300";
+			
+			
+			////////////////////////////////////////////////
+			// #### -------------- Set some headers according to file extension
+			
+			bool isPhpFile = false, isPythonFile = false, isPerlFile = false;
+			if (responseCode==200 || responseCode==302)
+			{
+				int fpLength = filePath.length();
+				string ext3 = string(""), ext2 = string(""), ext4 = string("");
+				if (fpLength>=3) ext2 = filePath.substr(fpLength-3, 3);
+				if (fpLength>=4) ext3 = filePath.substr(fpLength-4, 4);
+				if (fpLength>=5) ext4 = filePath.substr(fpLength-5, 5);
+				if (ext3==".php")
+				{
+					isPhpFile = true;
+					if (php) headerContentType = "text/html";
+					else headerContentType = "text/plain";
+				}
+				else if (ext2==".py")
+				{
+					isPythonFile = true;
+					if (python) headerContentType = "text/html";
+					else headerContentType = "text/plain";
+				}
+				else if (ext2==".pl")
+				{
+					isPerlFile = true;
+					if (perl) headerContentType = "text/html";
+					else headerContentType = "text/plain";
+				}
+				else if (ext3==".htm" || ext4==".html") headerContentType = "text/html";
+				else if (ext3==".txt") headerContentType = "text/plain";
+				else if (ext3==".pdf") headerContentType = "application/pdf";
+				else if (ext3==".ogg") headerContentType = "application/ogg";
+				else if (ext3==".xml") headerContentType = "application/xml";
+				else if (ext3==".xsl") headerContentType = "application/xml";
+				else if (ext3==".zip") headerContentType = "application/zip";
+				else if (ext4==".midi") headerContentType = "audio/midi";
+				else if (ext4==".mpeg") headerContentType = "audio/mpeg";
+				else if (ext3==".wav") headerContentType = "audio/x-wav";
+				else if (ext3==".bmp") headerContentType = "image/bmp";
+				else if (ext3==".gif") headerContentType = "image/gif";
+				else if (ext3==".jpg" || ext4==".jpeg") headerContentType = "image/jpeg";
+				else if (ext3==".png") headerContentType = "image/png";
+				else if (ext3==".tif" || ext4==".tiff") headerContentType = "image/tiff";
+				else if (ext3==".ico") headerContentType = "image/x-icon";
+				else if (ext3==".css") headerContentType = "text/css";
+				else if (ext3==".mpg" || ext4=="mpeg") headerContentType = "video/mpeg";
+				else if (ext3==".avi") headerContentType = "video/x-msvideo";
+				else
+				{
+					headerContentType = string("application/octet-stream");
+					headerContentDisposition = string("Content-Disposition: attachment; filename=")+fileName+string(";");
+				}
+			}
 
 			////////////////////////////////////////////////
 			// #### -------------- Send response
@@ -523,10 +629,15 @@ int main2(int argc, char* argv[])
 					regexs,
 					inputs,
 					keys,
-					values
+					values,
+					
+					headerContentType,
+					headerContentDisposition,
+					headerServer,
+					headerKeepAlive
 				);
 				
-				// Use vector GET and POST values to reflect changes in requestContent & requestParams
+				// Use vector GET and POST values to reflect configScript's changes in requestContent & requestParams
 				if (getChanged)
 				{
 					requestParams = generateParamString(getKeys, getValues);
@@ -537,113 +648,9 @@ int main2(int argc, char* argv[])
 				}
 				
 				auto startTimeResponse = std::chrono::system_clock::now();
-				std::string filePath = (std::string(directory)+std::string(requestPath));
-				/*if (boost::filesystem::is_directory(filePath))
-				{
-					filePath += "/";
-					requestPath += "/";
-				}*/ // TODO
-				int lastSlash = filePath.rfind('/');
-				std::string filePathOnly = filePath.substr(0, lastSlash+1);
-				std::string fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
-				if (responseCode==200)
-				{
-					int tryingIndex = -1;
-					bool triedAddingSlash = false;
-					
-				tryFileAgain:
-					lastSlash = filePath.rfind('/');
-					filePathOnly = filePath.substr(0, lastSlash+1);
-					fileName = filePath.substr(lastSlash+1, requestPath.length()-lastSlash-1);
-					if (debug) printf("\nTrying to find file...");
-					struct stat buffer;
-					if (stat(filePath.c_str(), &buffer)!=0) // If the file doesn't exist....
-					{
-						if (tryingIndex<indexes.size()-1)
-						{
-							tryingIndex++;
-							if (debug) printf("\nTrying index at [%i]", tryingIndex);
-							filePath = filePathOnly+indexes.at(tryingIndex);
-							goto tryFileAgain;
-						}
-						responseCode = 404;
-						responseText = "File not found";
-					}
-					else if (S_ISDIR(buffer.st_mode)) // If it's a directory...
-					{
-						if (filePath.back()!='/') filePath += "/";
-						fileName = "";
-						filePath += indexes.at(0);
-						tryingIndex = 0;
-						if (debug) printf("\nIt's a directory! added a / and cleared the fileName");
-						goto tryFileAgain;
-					}
-					if ((!triedAddingSlash) && (responseCode==404))
-					{
-						triedAddingSlash = true;
-						filePath += "/";
-						fileName = "";
-						tryingIndex = -1;
-						if (debug) printf("\nTrying index at [%i]", tryingIndex);
-						goto tryFileAgain;
-					}
-				}
-
 				
 				std::string header;
-			
-				std::string contentType = "text/plain";
-				bool isPhpFile = false, isPythonFile = false, isPerlFile = false;
-				if (responseCode==200 || responseCode==302)
-				{
-					int fpLength = filePath.length();
-					std::string ext3 = std::string(""), ext2 = std::string(""), ext4 = std::string("");
-					if (fpLength>=3) ext2 = filePath.substr(fpLength-3, 3);
-					if (fpLength>=4) ext3 = filePath.substr(fpLength-4, 4);
-					if (fpLength>=5) ext4 = filePath.substr(fpLength-5, 5);
-					if (ext3==".php")
-					{
-						isPhpFile = true;
-						if (php) contentType = "text/html";
-						else contentType = "text/plain";
-					}
-					else if (ext2==".py")
-					{
-						isPythonFile = true;
-						if (python) contentType = "text/html";
-						else contentType = "text/plain";
-					}
-					else if (ext2==".pl")
-					{
-						isPerlFile = true;
-						if (perl) contentType = "text/html";
-						else contentType = "text/plain";
-					}
-					else if (ext3==".htm" || ext4==".html") contentType = "text/html";
-					else if (ext3==".txt") contentType = "text/plain";
-					else if (ext3==".pdf") contentType = "application/pdf";
-					else if (ext3==".ogg") contentType = "application/ogg";
-					else if (ext3==".xml") contentType = "application/xml";
-					else if (ext3==".xsl") contentType = "application/xml";
-					else if (ext3==".zip") contentType = "application/zip";
-					else if (ext4==".midi") contentType = "audio/midi";
-					else if (ext4==".mpeg") contentType = "audio/mpeg";
-					else if (ext3==".wav") contentType = "audio/x-wav";
-					else if (ext3==".bmp") contentType = "image/bmp";
-					else if (ext3==".gif") contentType = "image/gif";
-					else if (ext3==".jpg" || ext4==".jpeg") contentType = "image/jpeg";
-					else if (ext3==".png") contentType = "image/png";
-					else if (ext3==".tif" || ext4==".tiff") contentType = "image/tiff";
-					else if (ext3==".ico") contentType = "image/x-icon";
-					else if (ext3==".css") contentType = "text/css";
-					else if (ext3==".mpg" || ext4=="mpeg") contentType = "video/mpeg";
-					else if (ext3==".avi") contentType = "video/x-msvideo";
-					else
-					{
-						contentType = std::string("application/octet-stream\r\nContent-Disposition: attachment; filename=")+fileName+std::string(";");
-					}
-				}
-			
+				
 				if (responseCode==200 || responseCode==302)
 				{
 					header = "HTTP/1.1 "+std::to_string(responseCode)+" "+responseText+"\r\nServer: Jesbus' server\r\nKeep-Alive: 300\r\nTransfer-Encoding: chunked\r\nConnection: close\r\nContent-Type: "+std::string(contentType)+"\r\n"+addedHeaders+"\r\n"; // maybe just accept the fact that php-cgi returns headers?
