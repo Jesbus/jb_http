@@ -262,7 +262,7 @@ string compileConfigScript(string confFile, vector<string>* strings, vector<stri
 			else if (s=="replace") operatorStack->push_back(0x4D);
 			else if (s=="with") operatorStack->push_back(0x4E);
 			
-			else if (s=="path" || s=="content" || s=="sourceip" || s=="getparams" || s=="postparams" || s=="requesttype")
+			else if (s=="path" || s=="content" || s=="sourceip" || s=="getparams" || s=="postparams" || s=="requesttype" || s=="responsecode")
 			{
 				inputs->push_back(string(s));
 				dataStack->push_back(0x22);
