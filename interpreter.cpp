@@ -43,9 +43,11 @@ void executeConfigScript
 	auto startTimeBytecode = std::chrono::system_clock::now();
 	if (strlen(confScript)<=2) return;
 	int byteCodeExecutionCount = 0;
-byteCodeAgain:
+	
 	vector<string>* varKeys   = new vector<string>();
 	vector<string>* varValues = new vector<string>();
+	
+byteCodeAgain:
 	byteCodeExecutionCount++;
 	string emptyStr  = string("" );
 	string boolTrue  = string("Y");
@@ -161,7 +163,12 @@ byteCodeAgain:
 				{
 					if (datas->size()>=1)
 					{
-						addedHeaders += datas->back();
+						string h = datas->back();
+						     if (h.substr(0, 13)=="Content-Type:") headerContentType = h.substr(14, h.length()-14);
+						else if (h.substr(0, 20)=="Content-Disposition:") headerContentDisposition = h.substr(21, h.length()-21);
+						else if (h.substr(0,  7)=="Server:") headerServer = h.substr(8, h.length()-8);
+						else if (h.substr(0, 11)=="Keep-Alive:") headerKeepAlive = h.substr(12, h.length()-12);
+						else addedHeaders += h + "\r\n";
 					}
 					else continue;
 				}
@@ -414,6 +421,10 @@ byteCodeAgain:
 				{
 					if (postKeys->size()==0) datas->push_back(strGET);
 					else datas->push_back(strPOST);
+				}
+				else if (*inputName=="responsecode")
+				{
+					datas->push_back(to_string(responseCode));
 				}
 				else if (*inputName=="getparams")
 				{
