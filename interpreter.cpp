@@ -38,7 +38,12 @@ void executeConfigScript
 	string& headerContentType,
 	string& headerContentDisposition,
 	string& headerServer,
-	string& headerKeepAlive
+	string& headerKeepAlive,
+	
+	char *directory,
+	vector<string>& indexes,
+	string& filePath,
+	string& fileName
 )
 {
 	auto startTimeBytecode = std::chrono::system_clock::now();
@@ -392,6 +397,11 @@ byteCodeAgain:
 				}
 				else if (*inputName=="responsecode")
 				{
+					if (!searchForFile(directory, requestPath, indexes, filePath, fileName))
+					{
+						responseCode = 404;
+						responseText = "File not found";
+					}
 					datas->push_back(to_string(responseCode));
 				}
 				else if (*inputName=="getparams")

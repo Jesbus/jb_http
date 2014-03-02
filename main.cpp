@@ -601,7 +601,12 @@ int main2(int argc, char* argv[])
 					headerContentType,
 					headerContentDisposition,
 					headerServer,
-					headerKeepAlive
+					headerKeepAlive,
+					
+					directory,
+					indexes,
+					filePath,
+					fileName
 				);
 				
 				if (requestPathChanged) filePath = (string(directory)+string(requestPath));

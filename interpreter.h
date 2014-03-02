@@ -29,5 +29,10 @@ extern void executeConfigScript
 	string& headerContentType,
 	string& headerContentDisposition,
 	string& headerServer,
-	string& headerKeepAlive
+	string& headerKeepAlive,
+	
+	char *directory,
+	vector<string>& indexes,
+	string& filePath,
+	string& fileName
 );
