@@ -609,8 +609,34 @@ int main2(int argc, char* argv[])
 					fileName
 				);
 				
-				if (requestPathChanged) filePath = (string(directory)+string(requestPath));
-			
+				bool fileExists = true;
+				
+				if (requestPathChanged)
+				{
+					filePath = (string(directory)+string(requestPath));
+					if (!searchForFile(directory, requestPath, indexes, filePath, fileName))
+					{
+						if (responseCode==200)
+						{
+							responseCode = 404;
+							responseText = "File not found";
+						}
+						fileExists = false;
+					}
+				}
+				else
+				{
+					if (!searchForFile(directory, requestPath, indexes, filePath, fileName))
+					{
+						if (responseCode==200)
+						{
+							//responseCode = 404;
+							//responseText = "File not found";
+						}
+						fileExists = false;
+					}
+				}
+				
 				// Use vector GET and POST values to reflect configScript's changes in requestContent & requestParams
 				if (getChanged)
 				{
@@ -628,127 +654,137 @@ int main2(int argc, char* argv[])
 				header  = "HTTP/1.1 "+std::to_string(responseCode)+" "+responseText+"\r\n";
 				header += "Server: "+headerServer+"\r\n";
 				header += "Keep-Alive: "+headerKeepAlive+"\r\n";
-				header += "Transfer-Encoding: chunked\r\n";
+				if (fileExists) header += "Transfer-Encoding: chunked\r\n";
 				header += "Connection: close\r\n";
 				header += "Content-Type: "+headerContentType+"\r\n";
 				if (headerContentDisposition.length()!=0) header += "Content-Disposition: "+headerContentDisposition+"\r\n";
+				if (!fileExists) header += "Content-Length: "+to_string(4+responseText.length())+"\r\n";
+				header += addedHeaders;
 				header += "\r\n";
 				
 				if (debug) printf("\nSending response header:\n#---\n%s\n#---", header.c_str());
 				
 				send(new_fd, header.c_str(), header.length(), 0);
 				
-				FILE* fp;
-				char result [256];
-				if (php&&isPhpFile)
+				if (!fileExists)
 				{
-					if (debug) printf("\nExecuting PHP script");
-					fp = popen((std::string("php -f ")+filePath+std::string(" \"")+requestParams+std::string("\" \"")+requestContent+std::string("\"")).c_str(), "r");
-				}
-				else if (perl&&isPerlFile)
-				{
-					if (debug) printf("\nExecuting perl script");
-					fp = popen((string("perl ")+filePath+string(" \"")+requestParams+string("\" \"")+requestContent+string("\"")).c_str(),"r");
-				}
-				else if (python&&isPythonFile)
-				{
-					if (debug) printf("\nExecuting python script");
-					stringstream getArgs;
-					getArgs << '{';
-					int i = 0;
-					if (requestParams.length()!=0) getArgs << "\\\"";
-					bool seenEquals = false;
-					for(i=0; i<requestParams.length(); i++)
-					{
-						switch(requestParams[i])
-						{
-							case '"':
-								getArgs << "\\\\\\\"";
-							break;
-							case '&':
-								if (!seenEquals) getArgs << "\\\":\\\"";
-								getArgs << "\\\",\\\"";
-								seenEquals = false;
-							break;
-							case '=':
-								getArgs << "\\\":\\\"";
-								seenEquals = true;
-							break;
-							default:
-								getArgs << requestParams[i];
-							break;
-						}
-					}
-					if (i!=0)
-					{
-						if (!seenEquals) getArgs << "\\\":\\\"";
-						getArgs << "\\\"";
-					}
-					getArgs << '}';
-				
-				
-					stringstream postArgs;
-					postArgs << '{';
-					i = 0;
-					if (requestContent.length()!=0) postArgs << "\\\"";
-					seenEquals = false;
-					for(i=0; i<requestContent.length(); i++)
-					{
-						switch(requestContent[i])
-						{
-							case '"':
-								postArgs << "\\\\\\\"";
-							break;
-							case '&':
-								if (!seenEquals) postArgs << "\\\":\\\"";
-								postArgs << "\\\",\\\"";
-								seenEquals = false;
-							break;
-							case '=':
-								seenEquals = true;
-								postArgs << "\\\":\\\"";
-							break;
-							default:
-								postArgs << requestContent[i];
-							break;
-						}
-					}
-					if (i!=0)
-					{
-						if (!seenEquals) postArgs << "\\\":\\\"";
-						postArgs << "\\\"";
-					}
-					postArgs << '}';
-					fp = popen((string("python ")+filePath+string(" ")+getArgs.str()+string(" ")+postArgs.str()).c_str(),"r");
+					string response = to_string(responseCode)+" "+responseText;
+					send(new_fd, response.c_str(), response.length(), 0);
 				}
 				else
 				{
-					if (debug) printf("\nfopen(%s,r)", filePath.c_str());
-					fp = fopen(filePath.c_str(), "r");
-				}
+					FILE* fp;
+					char result [256];
+					if (php&&isPhpFile)
+					{
+						if (debug) printf("\nExecuting PHP script");
+						fp = popen((std::string("php -f ")+filePath+std::string(" \"")+requestParams+std::string("\" \"")+requestContent+std::string("\"")).c_str(), "r");
+					}
+					else if (perl&&isPerlFile)
+					{
+						if (debug) printf("\nExecuting perl script");
+						fp = popen((string("perl ")+filePath+string(" \"")+requestParams+string("\" \"")+requestContent+string("\"")).c_str(),"r");
+					}
+					else if (python&&isPythonFile)
+					{
+						if (debug) printf("\nExecuting python script");
+						stringstream getArgs;
+						getArgs << '{';
+						int i = 0;
+						if (requestParams.length()!=0) getArgs << "\\\"";
+						bool seenEquals = false;
+						for(i=0; i<requestParams.length(); i++)
+						{
+							switch(requestParams[i])
+							{
+								case '"':
+									getArgs << "\\\\\\\"";
+								break;
+								case '&':
+									if (!seenEquals) getArgs << "\\\":\\\"";
+									getArgs << "\\\",\\\"";
+									seenEquals = false;
+								break;
+								case '=':
+									getArgs << "\\\":\\\"";
+									seenEquals = true;
+								break;
+								default:
+									getArgs << requestParams[i];
+								break;
+							}
+						}
+						if (i!=0)
+						{
+							if (!seenEquals) getArgs << "\\\":\\\"";
+							getArgs << "\\\"";
+						}
+						getArgs << '}';
 				
-				if (debug) printf("\nWriting content...");
-				int resultSize = 0;
-				while ((resultSize=(int)fread(result,1,256,fp))!=0)
-				{
-					std::stringstream strStream;
-					strStream << std::hex << resultSize;
-					std::string chunkSize(strStream.str());
+				
+						stringstream postArgs;
+						postArgs << '{';
+						i = 0;
+						if (requestContent.length()!=0) postArgs << "\\\"";
+						seenEquals = false;
+						for(i=0; i<requestContent.length(); i++)
+						{
+							switch(requestContent[i])
+							{
+								case '"':
+									postArgs << "\\\\\\\"";
+								break;
+								case '&':
+									if (!seenEquals) postArgs << "\\\":\\\"";
+									postArgs << "\\\",\\\"";
+									seenEquals = false;
+								break;
+								case '=':
+									seenEquals = true;
+									postArgs << "\\\":\\\"";
+								break;
+								default:
+									postArgs << requestContent[i];
+								break;
+							}
+						}
+						if (i!=0)
+						{
+							if (!seenEquals) postArgs << "\\\":\\\"";
+							postArgs << "\\\"";
+						}
+						postArgs << '}';
+						fp = popen((string("python ")+filePath+string(" ")+getArgs.str()+string(" ")+postArgs.str()).c_str(),"r");
+					}
+					else
+					{
+						if (debug) printf("\nfopen(%s,r)", filePath.c_str());
+						fp = fopen(filePath.c_str(), "r");
+					}
+				
+					if (debug) printf("\nWriting content...");
+					int resultSize = 0;
+					while ((resultSize=(int)fread(result,1,256,fp))!=0)
+					{
+						std::stringstream strStream;
+						strStream << std::hex << resultSize;
+						std::string chunkSize(strStream.str());
 		
-					send(new_fd, chunkSize.c_str(), chunkSize.length(), 0);
-					send(new_fd, "\r\n", 2, 0);
-					send(new_fd, result, resultSize, 0);
-					send(new_fd, "\r\n", 2, 0);
-				}
-				std::string endingChunk = "0\r\n\r\n";
-				send(new_fd, endingChunk.c_str(), endingChunk.length(), 0);
-				fclose(fp);
-				if (verbose)
-				{
-					auto endTimeResponse = std::chrono::system_clock::now();
-					auto elapsed = endTimeResponse - startTimeResponse;
-					double ms = double(elapsed.count())/1000000;
-					printf("\n%sGenerating & sending response took: %fms%s", BLU, ms, NRM);
+						send(new_fd, chunkSize.c_str(), chunkSize.length(), 0);
+						send(new_fd, "\r\n", 2, 0);
+						send(new_fd, result, resultSize, 0);
+						send(new_fd, "\r\n", 2, 0);
+					}
+					std::string endingChunk = "0\r\n\r\n";
+					send(new_fd, endingChunk.c_str(), endingChunk.length(), 0);
+					fclose(fp);
+					if (verbose)
+					{
+						auto endTimeResponse = std::chrono::system_clock::now();
+						auto elapsed = endTimeResponse - startTimeResponse;
+						double ms = double(elapsed.count())/1000000;
+						printf("\n%sGenerating & sending response took: %fms%s", BLU, ms, NRM);
+					}
 				}
 			}
 			close(new_fd);

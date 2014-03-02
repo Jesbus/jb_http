@@ -206,6 +206,11 @@ byteCodeAgain:
 						responseCode = 404;
 						responseText = "File not found";
 					}
+					else
+					{
+						responseCode = 200;
+						responseText = "OK";
+					}
 				}
 				else if (executingCommand==0x7A) // Recurse
 				{
