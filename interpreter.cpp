@@ -194,40 +194,6 @@ byteCodeAgain:
 					}
 					else continue;
 				}
-				/*else if (executingCommand==0x79) // ReplacePath
-				{
-					if (datas->size()>=2)
-					{
-						int last = datas->size()-1;
-						char type1 = dataTypes->at(last-1);
-						char type2 = dataTypes->at(last);
-						if (type2!=0x20) continue;
-						if (type1==0x20)
-						{
-							printf("\nReplacing string in path with string");
-							printf("\nOld requestPath=%s", requestPath.c_str());
-							replace(
-								requestPath,
-								datas->at(last-1),
-								datas->at(last)
-							);
-							printf("\nNew requestPath=%s", requestPath.c_str());
-						}
-						else if (type1==0x21)
-						{
-							printf("\nOld requestPath=%s", requestPath.c_str());
-							boost::regex reg(datas->at(last-1));
-							requestPath = boost::regex_replace(
-								requestPath,
-								reg,
-								datas->at(last)
-							);
-							printf("\nNew requestPath=%s", requestPath.c_str());
-						}
-						else continue;
-					}
-					else continue;
-				}*/
 				else if (executingCommand==0x7A) // Recurse
 				{
 					goto byteCodeAgain;

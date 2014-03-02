@@ -192,11 +192,6 @@ string compileConfigScript(string confFile, vector<string>* strings, vector<stri
 				byteCode << (unsigned char)0x78;
 				inCommandStatement = true;
 			}
-			/*else if (s=="ReplacePath")
-			{
-				byteCode << (unsigned char)0x79;
-				inCommandStatement = true;
-			}*/
 			else if (s=="Recurse")
 			{
 				byteCode << (unsigned char)0x7A;
