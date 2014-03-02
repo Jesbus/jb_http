@@ -23,7 +23,6 @@ Valid configuration scripts should be described by the following grammar:
 <statement> --> RemoveAllPost
 <statement> --> Log <simple_expression_string>
 
-<settable> --> header[<string_no_spaces>]
 <settable> --> var[<string_no_spaces>]
 <settable> --> get[<string_no_spaces>]
 <settable> --> post[<string_no_spaces>]
@@ -54,6 +53,7 @@ Valid configuration scripts should be described by the following grammar:
 <simple_expression_string> --> postparams
 <simple_expression_string> --> requesttype
 <simple_expression_string> --> responsecode
+<simple_expression_string> --> header[<string_no_spaces>]
 <simple_expression_string> --> <settable>
 
 <logic_op> --> and
