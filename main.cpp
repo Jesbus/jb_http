@@ -501,10 +501,7 @@ int main2(int argc, char* argv[])
 			{
 				responseCode = 404;
 				responseText = "File not found";
-				printf("\nFile does not exist. response set to 404");
 			}
-			
-			printf("\nafter searchForFile()");
 			
 			string headerContentType = "text/plain";
 			string headerContentDisposition = "";
