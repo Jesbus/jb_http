@@ -199,6 +199,14 @@ byteCodeAgain:
 					}
 					else continue;
 				}
+				else if (executingCommand==0x79) // CheckFileExistance
+				{
+					if (!searchForFile(directory, requestPath, indexes, filePath, fileName))
+					{
+						responseCode = 404;
+						responseText = "File not found";
+					}
+				}
 				else if (executingCommand==0x7A) // Recurse
 				{
 					goto byteCodeAgain;
@@ -397,11 +405,6 @@ byteCodeAgain:
 				}
 				else if (*inputName=="responsecode")
 				{
-					if (!searchForFile(directory, requestPath, indexes, filePath, fileName))
-					{
-						responseCode = 404;
-						responseText = "File not found";
-					}
 					datas->push_back(to_string(responseCode));
 				}
 				else if (*inputName=="getparams")
