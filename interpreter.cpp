@@ -194,7 +194,7 @@ byteCodeAgain:
 					}
 					else continue;
 				}
-				else if (executingCommand==0x79) // ReplacePath
+				/*else if (executingCommand==0x79) // ReplacePath
 				{
 					if (datas->size()>=2)
 					{
@@ -227,7 +227,7 @@ byteCodeAgain:
 						else continue;
 					}
 					else continue;
-				}
+				}*/
 				else if (executingCommand==0x7A) // Recurse
 				{
 					goto byteCodeAgain;
